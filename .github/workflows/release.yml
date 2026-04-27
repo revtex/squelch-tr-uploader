@@ -8,6 +8,11 @@ name: Release
 #   squelch_uploader-linux-arm64.so
 #   SHA256SUMS
 #
+# darwin-arm64 is intentionally not built for v0.1.0; CMake's bundled
+# FindBoost is too old for Homebrew Boost 1.90 on macos-14. macOS will
+# rejoin the matrix in a follow-up release once the Boost integration
+# is sorted (vendoring, vcpkg, or pinning a versioned formula).
+#
 # Release notes come from the matching `## [X.Y.Z]` section of CHANGELOG.md.
 
 on:
@@ -36,9 +41,6 @@ jobs:
           - arch: linux-arm64
             runs-on: ubuntu-24.04-arm
             ext: so
-          - arch: darwin-arm64
-            runs-on: macos-14
-            ext: dylib
     runs-on: ${{ matrix.runs-on }}
     steps:
       - uses: actions/checkout@v4
@@ -53,14 +55,6 @@ jobs:
             build-essential cmake ninja-build \
             libcurl4-openssl-dev libssl-dev \
             libboost-all-dev gnuradio-dev nlohmann-json3-dev
-
-      - name: Install build deps (macOS)
-        if: runner.os == 'macOS'
-        run: |
-          brew update
-          brew install cmake ninja boost gnuradio nlohmann-json
-          # libcurl ships with the SDK; Homebrew's `curl` is keg-only and
-          # not needed for build.
 
       - name: Configure
         run: cmake -S plugin -B plugin/build -G Ninja -DCMAKE_BUILD_TYPE=Release
@@ -109,11 +103,10 @@ jobs:
       - name: Collect release assets
         run: |
           mkdir -p dist
-          find artifacts -type f \
-            \( -name 'squelch_uploader-*.so' -o -name 'squelch_uploader-*.dylib' \) \
+          find artifacts -type f -name 'squelch_uploader-*.so' \
             -exec cp {} dist/ \;
           ls -la dist
-          ( cd dist && sha256sum squelch_uploader-*.so squelch_uploader-*.dylib > SHA256SUMS )
+          ( cd dist && sha256sum squelch_uploader-*.so > SHA256SUMS )
           cat dist/SHA256SUMS
 
       - name: Extract release notes from CHANGELOG.md
@@ -154,5 +147,4 @@ jobs:
           files: |
             dist/squelch_uploader-linux-amd64.so
             dist/squelch_uploader-linux-arm64.so
-            dist/squelch_uploader-darwin-arm64.dylib
             dist/SHA256SUMS
