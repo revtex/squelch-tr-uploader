@@ -4,6 +4,7 @@ build/
 **/CMakeFiles/
 **/cmake_install.cmake
 **/Makefile
+!/Makefile
 **/*.o
 **/*.so
 **/*.dylib

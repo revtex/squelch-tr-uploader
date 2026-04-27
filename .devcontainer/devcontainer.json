@@ -1,0 +1,35 @@
+{
+  "name": "squelch-tr-uploader",
+  "build": {
+    "dockerfile": "Dockerfile"
+  },
+  "features": {
+    "ghcr.io/devcontainers/features/git:1": {}
+  },
+  // Mount /tmp as a fresh tmpfs with the sticky bit at container start.
+  // Without this, the devcontainer features-install step leaves /tmp at
+  // 755 root:root, which blocks VS Code's credential-helper script and
+  // Pyright's tmpdir from being created by the non-root `vscode` user.
+  "runArgs": [
+    "--tmpfs",
+    "/tmp:rw,exec,nosuid,nodev,mode=1777,size=1g"
+  ],
+  "postCreateCommand": "bash .devcontainer/post-create.sh",
+  "remoteUser": "vscode",
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "ms-vscode.cpptools",
+        "ms-vscode.cmake-tools",
+        "github.vscode-github-actions",
+        "github.copilot",
+        "github.copilot-chat"
+      ],
+      "settings": {
+        "editor.formatOnSave": true,
+        "C_Cpp.default.cppStandard": "c++17",
+        "cmake.configureOnOpen": false
+      }
+    }
+  }
+}
