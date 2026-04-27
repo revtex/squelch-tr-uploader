@@ -6,20 +6,26 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ## [Unreleased]
 
-### Changed
+## [0.2.1] — 2026-04-27
 
-- **Build:** the plugin is now a CMake `MODULE` library (dlopen-only,
-  no SONAME, no version symlinks), matching Trunk-Recorder's bundled
-  uploaders.
+### Fixed
+
 - **Install:** `cmake --install` now installs `squelch_uploader.so` to
   `${CMAKE_INSTALL_PREFIX}/lib/trunk-recorder/` — the same directory
   Trunk-Recorder's bundled uploaders use, and the path baked into the
   `trunk-recorder` binary's `DT_RUNPATH`. The previous default
   (`lib/trunk-recorder/plugins/`) had an extra `plugins/` subdirectory
-  that is not on TR's runpath, so `cmake --install` produced a plugin
-  TR could not load by basename. If you were relying on the old layout,
-  pass `-DCMAKE_INSTALL_PREFIX=...` to redirect, or copy the `.so`
-  yourself.
+  that is not on TR's runpath, so following the README produced a
+  plugin TR could not load (`boost::dll::shared_library::load() failed:
+  cannot open shared object file`). If you were relying on the old
+  layout, pass `-DCMAKE_INSTALL_PREFIX=...` to redirect, or copy the
+  `.so` yourself.
+
+### Changed
+
+- **Build:** the plugin is now a CMake `MODULE` library (dlopen-only,
+  no SONAME, no version symlinks), matching Trunk-Recorder's bundled
+  uploaders.
 
 ### Documentation
 
