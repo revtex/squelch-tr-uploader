@@ -100,7 +100,7 @@ Add a plugin entry to your Trunk-Recorder `config.json`:
 |----------------|----------|---------|-------------------------------------------------------------------------------------------------------------|
 | `server`       | yes      | —       | Squelch base URL. Must be `http://` or `https://`.                                                          |
 | `apiKey`       | yes      | —       | Bearer token issued by Squelch. Never logged.                                                               |
-| `systemId`     | no       | —       | Squelch system ID. Calls are skipped (with a log message) when this is unset.                               |
+| `systemId`     | yes      | —       | Squelch system ID this Trunk-Recorder instance feeds. Must be a positive integer.                          |
 | `shortName`    | no       | —       | TR system short name; populates Squelch's `systemLabel`.                                                    |
 | `unitTagsFile` | no       | —       | Path to TR's unit-tag CSV; lets TR resolve `talkerAlias` for uploads.                                       |
 | `maxRetries`   | no       | `3`     | Per-call retry budget after the initial attempt. Range `0..10`. Backoff is exponential with jitter, ≤ 30 s. |

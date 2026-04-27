@@ -90,7 +90,7 @@ namespace
         std::string server;            // required, http(s) URL
         std::string api_key;           // required, non-empty (JSON "apiKey")
         std::string short_name;        // optional (JSON "shortName")
-        std::optional<long> system_id; // optional (JSON "systemId")
+        long system_id = 0;            // required, positive (JSON "systemId")
         std::string unit_tags_file;    // optional (JSON "unitTagsFile")
 
         // Maximum retry attempts on transient failure (HTTP 408, 429, 5xx,
@@ -178,18 +178,27 @@ namespace
         // shortName — optional.
         get_optional_string<std::string>(data, "shortName", cfg.short_name);
 
-        // systemId — optional.
+        // systemId — required, positive integer.
         {
             auto it = data.find("systemId");
-            if (it != data.end() && !it->is_null())
+            if (it == data.end() || it->is_null())
             {
-                if (!it->is_number_integer())
-                {
-                    if (error)
-                        *error = "systemId must be an integer";
-                    return std::nullopt;
-                }
-                cfg.system_id = it->get<long>();
+                if (error)
+                    *error = "missing required field: systemId";
+                return std::nullopt;
+            }
+            if (!it->is_number_integer())
+            {
+                if (error)
+                    *error = "systemId must be an integer";
+                return std::nullopt;
+            }
+            cfg.system_id = it->get<long>();
+            if (cfg.system_id <= 0)
+            {
+                if (error)
+                    *error = "systemId must be a positive integer";
+                return std::nullopt;
             }
         }
 
@@ -955,9 +964,7 @@ namespace squelch
                 << "[" << kPluginName << "] config parsed: server="
                 << config_.server << " apiKey=" << ::redact(config_.api_key)
                 << " shortName='" << config_.short_name << "'"
-                << " systemId="
-                << (config_.system_id ? std::to_string(*config_.system_id)
-                                      : std::string("<none>"));
+                << " systemId=" << config_.system_id;
             return 0;
         }
 
@@ -1023,15 +1030,6 @@ namespace squelch
 
         int call_end(Call_Data_t call_info) override
         {
-            if (!config_.system_id)
-            {
-                BOOST_LOG_TRIVIAL(warning)
-                    << "[" << kPluginName
-                    << "] no systemId configured; skipping upload of "
-                    << call_info.filename;
-                return 0;
-            }
-
             if (!uploader_)
             {
                 BOOST_LOG_TRIVIAL(error)
@@ -1061,7 +1059,7 @@ namespace squelch
             job.patched_talkgroups = std::vector<unsigned long>(
                 call_info.patched_talkgroups.begin(),
                 call_info.patched_talkgroups.end());
-            job.system_id = *config_.system_id;
+            job.system_id = config_.system_id;
 
             job.transmission_source_list.reserve(
                 call_info.transmission_source_list.size());

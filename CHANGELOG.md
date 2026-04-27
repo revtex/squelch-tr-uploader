@@ -57,7 +57,7 @@ Plugin configuration block in `config.json`:
 |----------------------|----------|---------|-------|
 | `server`             | yes      | —       | Squelch base URL. Must be `http://` or `https://`. |
 | `apiKey`             | yes      | —       | Bearer token issued by Squelch. Never logged. |
-| `systemId`           | no       | —       | Squelch system ID this Trunk-Recorder instance feeds. Calls are skipped (with a log message) when this is unset. |
+| `systemId`           | yes      | —       | Squelch system ID this Trunk-Recorder instance feeds. Must be a positive integer. |
 | `shortName`          | no       | —       | Trunk-Recorder system short name (informational, used in `systemLabel`). |
 | `unitTagsFile`       | no       | —       | Path to a TR `unitTagsFile`; used by TR to resolve `talkerAlias`. |
 | `maxRetries`         | no       | `3`     | Per-call retry budget. Range `0..10`. |
