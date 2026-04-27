@@ -6,6 +6,19 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ## [Unreleased]
 
+## [0.2.0] — 2026-04-27
+
+### Changed
+
+- **Breaking:** plugin configuration now requires a `systems[]` array of
+  `{ systemId, shortName, unitTagsFile? }` entries. A single
+  `squelch_uploader` instance routes each completed call to the matching
+  entry by TR's `shortName`; calls whose `shortName` is not listed are
+  dropped at debug level. Top-level `systemId` / `shortName` /
+  `unitTagsFile` are no longer accepted — move them into a `systems[]`
+  entry (one entry is fine for a single-system setup). `shortName`
+  values must be unique within `systems[]`.
+
 ## [0.1.0] — initial release
 
 First public release of `squelch_uploader.so`, the Trunk-Recorder plugin
@@ -85,4 +98,5 @@ instead of silently continuing.
 
 | `squelch-tr-uploader` | Squelch / OpenScanner            | Trunk-Recorder |
 |-----------------------|----------------------------------|----------------|
+| `0.2.0`               | ≥ 1.3.0 (native `/api/v1/calls`) | `v5.2.1`       |
 | `0.1.0`               | ≥ 1.3.0 (native `/api/v1/calls`) | `v5.2.1`       |

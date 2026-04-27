@@ -28,6 +28,7 @@ own bundled uploaders.
 
 | `squelch-tr-uploader` | Squelch / OpenScanner            | Trunk-Recorder |
 |-----------------------|----------------------------------|----------------|
+| `0.2.0`               | ≥ 1.3.0 (native `/api/v1/calls`) | `v5.2.1`       |
 | `0.1.0`               | ≥ 1.3.0 (native `/api/v1/calls`) | `v5.2.1`       |
 
 The plugin is compiled against the exact TR tag listed above. To build
@@ -78,7 +79,9 @@ sudo install -m 0644 plugin/build/squelch_uploader.so \
 
 ## Configure
 
-Add a plugin entry to your Trunk-Recorder `config.json`:
+Each plugin entry uses a `systems[]` array so a single `squelch_uploader`
+instance can route every TR system's calls to the matching Squelch
+`systemId`. Use one entry per TR system (one entry is fine):
 
 ```jsonc
 {
@@ -87,23 +90,43 @@ Add a plugin entry to your Trunk-Recorder `config.json`:
       "library": "squelch_uploader.so",
       "server": "https://squelch.example.com",
       "apiKey": "tr-recorder-1.<key>",
-      "systemId": 1,
-      "shortName": "MyCity",
-      "unitTagsFile": "/etc/trunk-recorder/units.csv",
-      "maxRetries": 3
+      "maxRetries": 3,
+      "systems": [
+        {
+          "systemId": 1,
+          "shortName": "MARCSLake",
+          "unitTagsFile": "/etc/trunk-recorder/marcslake.csv"
+        },
+        {
+          "systemId": 2,
+          "shortName": "MARCSCuy"
+        },
+        {
+          "systemId": 3,
+          "shortName": "MARCSGea"
+        }
+      ]
     }
   ]
 }
 ```
 
-| Key            | Required | Default | Notes                                                                                                       |
-|----------------|----------|---------|-------------------------------------------------------------------------------------------------------------|
-| `server`       | yes      | —       | Squelch base URL. Must be `http://` or `https://`.                                                          |
-| `apiKey`       | yes      | —       | Bearer token issued by Squelch. Never logged.                                                               |
-| `systemId`     | yes      | —       | Squelch system ID this Trunk-Recorder instance feeds. Must be a positive integer.                          |
-| `shortName`    | no       | —       | TR system short name; populates Squelch's `systemLabel`.                                                    |
-| `unitTagsFile` | no       | —       | Path to TR's unit-tag CSV; lets TR resolve `talkerAlias` for uploads.                                       |
-| `maxRetries`   | no       | `3`     | Per-call retry budget after the initial attempt. Range `0..10`. Backoff is exponential with jitter, ≤ 30 s. |
+Each completed call is routed by its TR `shortName` to the matching
+`systems[]` entry; calls whose `shortName` is not listed are dropped
+(logged at debug level) rather than uploaded. `shortName` values must be
+unique within `systems[]`. Top-level `systemId` / `shortName` /
+`unitTagsFile` keys are not accepted — every routing field lives inside
+`systems[]`.
+
+| Key                     | Required | Default | Notes                                                                                                       |
+|-------------------------|----------|---------|-------------------------------------------------------------------------------------------------------------|
+| `server`                | yes      | —       | Squelch base URL. Must be `http://` or `https://`.                                                          |
+| `apiKey`                | yes      | —       | Bearer token issued by Squelch. Never logged.                                                               |
+| `systems[]`             | yes      | —       | Non-empty array of system routing entries (see below).                                                      |
+| `systems[].systemId`    | yes      | —       | Squelch system ID this TR system feeds. Positive integer.                                                   |
+| `systems[].shortName`   | yes      | —       | TR system short name; routing key. Unique within `systems[]`. Populates Squelch's `systemLabel`.            |
+| `systems[].unitTagsFile`| no       | —       | Path to TR's unit-tag CSV; lets TR resolve `talkerAlias` for uploads.                                       |
+| `maxRetries`            | no       | `3`     | Per-call retry budget after the initial attempt. Range `0..10`. Backoff is exponential with jitter, ≤ 30 s. |
 
 Invalid configuration fails fast at TR startup with a clear log message
 rather than silently continuing.
