@@ -8,6 +8,14 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ### Added
 
+- Plugin now uploads completed calls to Squelch via `POST /api/v1/calls`
+  (multipart/form-data, `Authorization: Bearer`). Recordings larger than
+  50 MiB are rejected locally with a clear log message.
+- Mapped Trunk-Recorder call metadata onto the Squelch field map
+  (`systemId`, `talkgroupId`, `startedAt` as RFC 3339 UTC, `frequencyHz`,
+  `durationMs`, `unitId`, `talkerAlias`, `talkgroupLabel`/`Tag`/`Group`/`Name`,
+  `errorCount`/`spikeCount`, plus `sources`/`frequencies`/`patches` as JSON).
+- TLS verification is on by default; there is no insecure-mode flag.
 - Plugin now builds against Trunk-Recorder's real `Plugin_Api`. Headers are
   pulled at CMake configure time via `FetchContent`, pinned to `v5.2.1` (override
   with `-DSQUELCH_TR_TAG=...`).

@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 //
 // Smoke tests for plugin identity. The BOOST_DLL_ALIAS-exported factory
-// requires dlopen() to exercise; that runs in the integration harness
-// (Phase C-3+), not in this unit-test binary.
+// requires dlopen() to exercise; that runs in the integration harness, not
+// in this unit-test binary.
 
 #include <gtest/gtest.h>
 

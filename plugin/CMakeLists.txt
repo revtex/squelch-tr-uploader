@@ -56,6 +56,9 @@ find_package(Boost REQUIRED COMPONENTS ${SQUELCH_BOOST_COMPONENTS})
 add_library(squelch_uploader SHARED
     src/squelch_uploader.cc
     src/config.cc
+    src/http_client.cc
+    src/http_client_util.cc
+    src/upload_request.cc
 )
 
 target_include_directories(squelch_uploader PUBLIC

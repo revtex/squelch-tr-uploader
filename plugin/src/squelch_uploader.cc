@@ -2,15 +2,17 @@
 //
 // squelch_uploader.cc — Trunk-Recorder Plugin_Api subclass for Squelch.
 //
-// Phase C-2 wires up lifecycle hooks: parse_config(), init(), start(), stop()
-// and the per-call/unit hooks. call_end() currently logs a placeholder; the
-// actual multipart upload lands in Phase C-3.
+// On call_end() the plugin builds an UploadRequest from the Call_Data_t,
+// runs the 50 MiB pre-flight, and POSTs a multipart body to
+// `<server>/api/v1/calls` with `Authorization: Bearer <api-key>`.
 //
 // The factory is exported with BOOST_DLL_ALIAS so TR's plugin loader picks it
 // up identically to the upstream rdioscanner_uploader.
 
 #include "squelch_uploader.h"
 #include "squelch_uploader/config.h"
+#include "squelch_uploader/http_client.h"
+#include "squelch_uploader/upload_request.h"
 
 #include "trunk-recorder/plugin_manager/plugin_api.h"
 
@@ -18,6 +20,8 @@
 #include <boost/log/trivial.hpp>
 #include <boost/shared_ptr.hpp>
 
+#include <cstdint>
+#include <memory>
 #include <string>
 #include <vector>
 
@@ -96,40 +100,153 @@ namespace squelch
 
         int call_start(Call *call) override
         {
-            // TODO(phase-C-3+): track in-flight calls if we end up needing
-            // start/end correlation for multi-recorder rigs.
+            // No per-call setup needed today.
             (void)call;
             return 0;
         }
 
         int call_end(Call_Data_t call_info) override
         {
-            // TODO(phase-C-3): build multipart body from call_info and POST to
-            // <server>/api/v1/calls. For now just record what would have shipped.
-            BOOST_LOG_TRIVIAL(info)
-                << "[" << kPluginName << "] would upload " << call_info.filename;
-            return 0;
+            // TODO: hand this off to a worker pool — currently uploads run
+            // synchronously on TR's call_end thread.
+
+            if (!config_.system_id)
+            {
+                BOOST_LOG_TRIVIAL(warning)
+                    << "[" << kPluginName
+                    << "] no systemId configured; skipping upload of "
+                    << call_info.filename;
+                return 0;
+            }
+
+            // Pick the on-disk audio path the same way upstream rdioscanner
+            // does: `converted` when the call was compressed, otherwise the
+            // raw `filename`.
+            CallData call;
+            call.talkgroup = call_info.talkgroup;
+            call.start_time = call_info.start_time;
+            call.freq = call_info.freq;
+            call.length = call_info.length;
+            call.error_count = call_info.error_count;
+            call.spike_count = call_info.spike_count;
+            call.talkgroup_tag = call_info.talkgroup_tag;
+            call.talkgroup_alpha_tag = call_info.talkgroup_alpha_tag;
+            call.talkgroup_description = call_info.talkgroup_description;
+            call.talkgroup_group = call_info.talkgroup_group;
+            call.audio_path =
+                call_info.compress_wav ? call_info.converted : call_info.filename;
+            call.short_name = call_info.short_name;
+            call.patched_talkgroups = std::vector<unsigned long>(
+                call_info.patched_talkgroups.begin(),
+                call_info.patched_talkgroups.end());
+
+            call.transmission_source_list.reserve(
+                call_info.transmission_source_list.size());
+            for (const auto &s : call_info.transmission_source_list)
+            {
+                CallSourceLite lite;
+                lite.source = s.source;
+                lite.time = s.time;
+                lite.position = s.position;
+                lite.length = 0.0; // TR's Call_Source has no per-tx length;
+                                   // duration_ms covers the whole call.
+                lite.emergency = s.emergency;
+                lite.signal_system = s.signal_system;
+                lite.tag = s.tag;
+                call.transmission_source_list.push_back(std::move(lite));
+            }
+
+            call.transmission_error_list.reserve(
+                call_info.transmission_error_list.size());
+            for (const auto &f : call_info.transmission_error_list)
+            {
+                CallFreqLite lite;
+                lite.freq = call_info.freq; // per-call freq; TR's Call_Error
+                                            // doesn't carry one.
+                lite.time = f.time;
+                lite.position = f.position;
+                lite.total_len = f.total_len;
+                lite.error_count = static_cast<long>(f.error_count);
+                lite.spike_count = static_cast<long>(f.spike_count);
+                call.transmission_error_list.push_back(std::move(lite));
+            }
+
+            // Pre-flight: file must exist and be ≤ 50 MiB.
+            std::uintmax_t audio_size = 0;
+            std::string preflight_error;
+            if (!check_audio_file(call.audio_path, &audio_size,
+                                  &preflight_error))
+            {
+                BOOST_LOG_TRIVIAL(error)
+                    << "[" << kPluginName << "] " << preflight_error;
+                return 1;
+            }
+
+            UploadRequest req =
+                UploadRequest::from_call_data(call, *config_.system_id);
+
+            Multipart body;
+            req.to_multipart(body);
+
+            const std::string url = build_upload_url(config_.server);
+            const HttpResult result =
+                http_client_->upload(url, config_.api_key, body);
+
+            if (!result.error_message.empty())
+            {
+                BOOST_LOG_TRIVIAL(warning)
+                    << "[" << kPluginName << "] upload network error for "
+                    << call.audio_path << ": " << result.error_message;
+                // TODO: retry with exponential backoff.
+                return 1;
+            }
+
+            if (result.status_code >= 200 && result.status_code < 300)
+            {
+                BOOST_LOG_TRIVIAL(info)
+                    << "[" << kPluginName << "] uploaded call talkgroup="
+                    << call.talkgroup << " bytes=" << audio_size
+                    << " response=" << result.body;
+                return 0;
+            }
+
+            if (result.status_code >= 400 && result.status_code < 500)
+            {
+                BOOST_LOG_TRIVIAL(error)
+                    << "[" << kPluginName << "] upload rejected ("
+                    << result.status_code << ") for talkgroup="
+                    << call.talkgroup << ": " << result.body;
+                // 4xx is deterministic — don't retry.
+                return 1;
+            }
+
+            BOOST_LOG_TRIVIAL(warning)
+                << "[" << kPluginName << "] upload server error ("
+                << result.status_code << ") for talkgroup="
+                << call.talkgroup << ": " << result.body;
+            // TODO: retry with exponential backoff.
+            return 1;
         }
 
         // ----- recorder / system / source setup --------------------------------
 
         int setup_recorder(Recorder *recorder) override
         {
-            // TODO(phase-C-3+): bind per-recorder state if needed.
+            // TODO: bind per-recorder state if needed.
             (void)recorder;
             return 0;
         }
 
         int setup_system(System *system) override
         {
-            // TODO(phase-C-3+): map TR system -> Squelch systemId here.
+            // TODO: map TR system -> Squelch systemId here.
             (void)system;
             return 0;
         }
 
         int setup_systems(std::vector<System *> systems) override
         {
-            // TODO(phase-C-3+): validate that each declared system has a Squelch
+            // TODO: validate that each declared system has a Squelch
             // counterpart in our config.
             (void)systems;
             return 0;
@@ -137,7 +254,6 @@ namespace squelch
 
         int setup_sources(std::vector<Source *> sources) override
         {
-            // TODO(phase-C-3+).
             (void)sources;
             return 0;
         }
@@ -146,8 +262,8 @@ namespace squelch
 
         int unit_registration(System *sys, long source_id) override
         {
-            // TODO(phase-C-3+): forward unit-registration events when Squelch
-            // gains a unit-registration endpoint.
+            // TODO: forward unit-registration events when Squelch gains a
+            // unit-registration endpoint.
             (void)sys;
             (void)source_id;
             return 0;
@@ -206,6 +322,7 @@ namespace squelch
 
     private:
         ::squelch::Config config_{};
+        std::unique_ptr<HttpClient> http_client_ = std::make_unique<HttpClient>();
     };
 
 } // namespace squelch

@@ -4,7 +4,11 @@ find_package(nlohmann_json 3 QUIET)
 add_executable(squelch_uploader_tests
     test_uploader.cc
     test_config.cc
+    test_upload_request.cc
+    test_http_client.cc
     ../src/config.cc
+    ../src/http_client_util.cc
+    ../src/upload_request.cc
 )
 
 target_link_libraries(squelch_uploader_tests PRIVATE
