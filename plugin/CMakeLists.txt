@@ -49,6 +49,16 @@ find_package(nlohmann_json 3 QUIET)
 # boost/property_tree, etc. We export the plugin factory with BOOST_DLL_ALIAS,
 # which expects boost::dll headers (header-only) plus boost_log for the runtime
 # logging used by parse_config / lifecycle hooks.
+#
+# Force the legacy FindBoost path (CMake's `FindBoost.cmake`) instead of
+# upstream Boost's `BoostConfig.cmake`. Homebrew's monolithic `boost` formula
+# ships the umbrella `BoostConfig` but not the per-component config packages
+# (`boost_systemConfig.cmake`, etc.), so the new path fails on macOS while
+# the legacy library scan works on every platform we ship.
+if(POLICY CMP0167)
+    cmake_policy(SET CMP0167 OLD)
+endif()
+set(Boost_NO_BOOST_CMAKE ON)
 set(SQUELCH_BOOST_COMPONENTS log log_setup system filesystem regex thread)
 find_package(Boost REQUIRED COMPONENTS ${SQUELCH_BOOST_COMPONENTS})
 
