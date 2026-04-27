@@ -6,28 +6,38 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ## [Unreleased]
 
+### Changed
+
+- The plugin's internal architecture has been simplified to match the
+  shape of TR's bundled uploaders: a single background uploader thread
+  with an unbounded in-process queue. Retries on transient failures
+  (HTTP 408, 429, 5xx, network errors) still use exponential backoff
+  with jitter. The `workers`, `queueCapacity`, and
+  `shutdownDrainSeconds` config keys have been removed; only
+  `maxRetries` (default 3) remains.
+
 ### Removed
 
 - The Python fallback uploader (`script/upload.py`) is no longer part of
   this repo. The plugin is the only supported delivery path. Use TR's
   built-in `uploadScript` hook with your own script if you need a
   non-plugin path.
+- `workers`, `queueCapacity`, `shutdownDrainSeconds` config keys.
+  Behaviour is now: one uploader thread, unbounded queue, blocking
+  shutdown until the queue is drained.
 
 ### Added
 
 - Uploads now include `talkerAlias` whenever Trunk-Recorder has resolved
   a unit alias (from `unitTagsFile` or over-the-air alias decode) for
   the call's primary unit. Empty/unknown aliases are simply omitted.
-- Uploads now run on a bounded background worker pool, so Trunk-Recorder's
-  recording loop never blocks on network I/O. Transient failures (HTTP 408,
-  429, 5xx, network errors) retry with exponential backoff plus jitter,
-  capped at 30 s per delay; 4xx validation errors are not retried. On
-  shutdown, in-flight uploads drain up to a configurable timeout before
-  TR exits.
-- New optional config keys: `workers` (default 2), `queueCapacity`
-  (default 64), `maxRetries` (default 3), `shutdownDrainSeconds`
-  (default 10). When the queue is full, calls are dropped with an error
-  log rather than blocking the recorder.
+- Uploads now run on a background uploader thread, so Trunk-Recorder's
+  recording loop never blocks on network I/O. Transient failures (HTTP
+  408, 429, 5xx, network errors) retry with exponential backoff plus
+  jitter, capped at 30 s per delay; 4xx validation errors are not
+  retried. On shutdown the plugin blocks until the in-process queue has
+  drained.
+- New optional config key: `maxRetries` (default 3, range 0..10).
 - Plugin now uploads completed calls to Squelch via `POST /api/v1/calls`
   (multipart/form-data, `Authorization: Bearer`). Recordings larger than
   50 MiB are rejected locally with a clear log message.
@@ -40,8 +50,8 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
   pulled at CMake configure time via `FetchContent`, pinned to `v5.2.1` (override
   with `-DSQUELCH_TR_TAG=...`).
 - `squelch_uploader.so` exports a `create_plugin` factory via `BOOST_DLL_ALIAS`,
-  matching Trunk-Recorder's loader contract (drop the `.so` into TR's plugin
-  directory the same way you would `rdioscanner_uploader.so`).
+  matching Trunk-Recorder's loader contract. Drop the `.so` into TR's plugin
+  directory and reference it from your TR `config.json` `plugins` block.
 - Plugin configuration block: `server`, `apiKey`, `shortName`, optional
   `systemId`, optional `unitTagsFile`. The server URL is required and must use
   `http://` or `https://`; `apiKey` is required. Invalid configuration now fails

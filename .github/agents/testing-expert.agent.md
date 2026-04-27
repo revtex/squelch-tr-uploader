@@ -8,7 +8,7 @@ applyTo: "plugin/**"
 
 You write fast, deterministic, hermetic gtest unit tests for the squelch-tr-uploader plugin. No live network, no flaky timers, no race-prone `sleep()` calls.
 
-> Tests are temporary. They will be removed before v1.0.0 (Phase C-7 in the build-out plan). Don't add testing seams (interfaces, factories) that won't survive that cull — keep the production code shaped like `rdioscanner_uploader`.
+> Tests are temporary. They will be removed before v1.0.0 (Phase C-7 in the build-out plan). Don't add testing seams (interfaces, factories) that won't survive that cull — keep the production code shaped like TR's bundled uploaders under `plugins/` (one or two source files, no service-grade abstractions).
 
 ## Working Style
 

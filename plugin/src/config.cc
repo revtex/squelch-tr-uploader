@@ -110,9 +110,8 @@ namespace squelch
         // unitTagsFile — optional.
         get_optional<std::string>(data, "unitTagsFile", cfg.unit_tags_file);
 
-        // Worker-pool tuning. All bounded; values out of range are rejected
-        // so the operator notices the typo at startup instead of seeing
-        // silent clamping.
+        // Retry tuning. The only knob still exposed in v1; defaults plus a
+        // hard upper bound to keep stuck calls from hammering Squelch.
         auto parse_bounded_uint = [&](const char *key, std::uint64_t lo,
                                       std::uint64_t hi, std::uint64_t &out_u64,
                                       bool &present) -> bool
@@ -148,34 +147,10 @@ namespace squelch
         {
             std::uint64_t v = 0;
             bool present = false;
-            if (!parse_bounded_uint("workers", 1, 32, v, present))
-                return std::nullopt;
-            if (present)
-                cfg.worker_count = static_cast<std::size_t>(v);
-        }
-        {
-            std::uint64_t v = 0;
-            bool present = false;
-            if (!parse_bounded_uint("queueCapacity", 1, 4096, v, present))
-                return std::nullopt;
-            if (present)
-                cfg.queue_capacity = static_cast<std::size_t>(v);
-        }
-        {
-            std::uint64_t v = 0;
-            bool present = false;
             if (!parse_bounded_uint("maxRetries", 0, 10, v, present))
                 return std::nullopt;
             if (present)
                 cfg.max_retries = static_cast<unsigned>(v);
-        }
-        {
-            std::uint64_t v = 0;
-            bool present = false;
-            if (!parse_bounded_uint("shutdownDrainSeconds", 0, 600, v, present))
-                return std::nullopt;
-            if (present)
-                cfg.shutdown_drain_seconds = static_cast<unsigned>(v);
         }
 
         return cfg;

@@ -52,7 +52,7 @@ You are an expert C++ developer working on the Squelch uploader plugin for Trunk
 
 ### Logging
 
-- Use TR's logging macro (`BOOST_LOG_TRIVIAL` if TR exposes it, otherwise `std::cerr` for fatal-only, `std::clog` for info). Match TR's existing `rdioscanner_uploader` style.
+- Use TR's logging macro (`BOOST_LOG_TRIVIAL` if TR exposes it, otherwise `std::cerr` for fatal-only, `std::clog` for info). Match TR's existing bundled-uploader style.
 - Log levels: `error` (operator must intervene), `warn` (degraded — retry, fallback), `info` (lifecycle), `debug` (per-call detail). No `info` per call — that floods TR's log.
 - Never log the API key. Log a truncated identifier only (first 6 chars).
 

@@ -13,8 +13,7 @@
 
 #pragma once
 
-#include "squelch_uploader/http_client.h"
-
+#include <cstddef>
 #include <cstdint>
 #include <ctime>
 #include <optional>
@@ -23,6 +22,8 @@
 
 namespace squelch
 {
+
+    class Multipart; // defined in squelch_uploader/uploader.h
 
     // Mirrors TR's `Call_Source` (per-transmission unit-id record).
     struct CallSourceLite
@@ -119,6 +120,10 @@ namespace squelch
 
     // Format `epoch_s` as an RFC 3339 timestamp in UTC: `YYYY-MM-DDTHH:MM:SSZ`.
     std::string to_rfc3339_utc(std::time_t epoch_s);
+
+    // Squelch v1's upload-route ceiling. Files larger than this are rejected
+    // before opening a connection.
+    constexpr std::size_t kMaxUploadBytes = 50ULL * 1024ULL * 1024ULL;
 
     // Pre-flight: returns true iff `bytes` is within Squelch's 50 MiB ceiling.
     constexpr bool is_audio_size_ok(std::uintmax_t bytes) noexcept

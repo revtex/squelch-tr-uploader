@@ -2,7 +2,7 @@
 
 ## Project Overview
 
-`squelch-tr-uploader` is the first-party Trunk-Recorder uploader for **Squelch** (currently developed at [revtex/OpenScanner](https://github.com/revtex/OpenScanner) — pending rename). It is delivered as a single C++ TR plugin (`squelch_uploader.so`) under [plugin/](../plugin/), loaded by Trunk-Recorder via its `Plugin_Api` (the same mechanism as the built-in `rdioscanner_uploader`). It POSTs completed calls to Squelch's native `/api/v1/calls` endpoint as multipart/form-data with `Authorization: Bearer <api-key>`.
+`squelch-tr-uploader` is the first-party Trunk-Recorder uploader for **Squelch** (currently developed at [revtex/OpenScanner](https://github.com/revtex/OpenScanner) — pending rename). It is delivered as a single C++ TR plugin (`squelch_uploader.so`) under [plugin/](../plugin/), loaded by Trunk-Recorder via its `Plugin_Api` (the same mechanism TR uses for its bundled uploaders under `plugins/`). It POSTs completed calls to Squelch's native `/api/v1/calls` endpoint as multipart/form-data with `Authorization: Bearer <api-key>`.
 
 Field-mapping rules: see [Squelch's native-API plan §5](https://github.com/revtex/OpenScanner/blob/dev/docs/plans/native-api-design-plan.md#5-multipart-call-upload-field-map) and the verified contract at [docs/plans/squelch-wire-contract.md](../docs/plans/squelch-wire-contract.md).
 
@@ -43,7 +43,7 @@ Delegate domain work to the matching expert agent via `runSubagent`:
 - RAII for all owned resources. libcurl wrapped in a small RAII handle; never `curl_easy_cleanup` manually outside the dtor.
 - Public symbols live in `namespace squelch`. Only `extern "C"` factory functions cross the ABI boundary.
 - New compilation units register in `plugin/CMakeLists.txt`; gtest binaries via `gtest_discover_tests`.
-- Keep the layout small. Match `rdioscanner_uploader`'s shape — a handful of source files, not a service-grade architecture. Don't add interfaces / factories / multi-thread pools that exist only to make tests easier; tests will be removed before v1.0.0.
+- Keep the layout small. Match the shape of TR's bundled uploaders under `plugins/` (typically a single `*.cc` file each) — a handful of source files, not a service-grade architecture. Don't add interfaces / factories / multi-thread pools that exist only to make tests easier; tests will be removed before v1.0.0.
 
 ## Wire Contract
 

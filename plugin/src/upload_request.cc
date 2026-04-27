@@ -7,6 +7,7 @@
 // touching TR's vendored include tree.
 
 #include "squelch_uploader/upload_request.h"
+#include "squelch_uploader/uploader.h"
 
 #include <sys/stat.h>
 
@@ -70,9 +71,9 @@ namespace squelch
             out.put('"');
         }
 
-        // Format a double with 2 decimals, matching the precision rdioscanner
-        // emits for `pos` / `len` fields. The receiver round-trips it as
-        // float-or-string so this is just for human readability.
+        // Format a double with `precision` decimals. The receiver round-trips
+        // these as float-or-string so this is just for human readability of
+        // captured uploads.
         std::string fmt_fixed(double v, int precision)
         {
             char buf[64];

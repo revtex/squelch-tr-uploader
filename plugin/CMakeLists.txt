@@ -9,8 +9,6 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 
-option(SQUELCH_BUILD_TESTS "Build unit tests" OFF)
-
 # ---------------------------------------------------------------------------
 # Trunk-Recorder Plugin_Api headers
 #
@@ -56,11 +54,8 @@ find_package(Boost REQUIRED COMPONENTS ${SQUELCH_BOOST_COMPONENTS})
 add_library(squelch_uploader SHARED
     src/squelch_uploader.cc
     src/config.cc
-    src/http_client.cc
-    src/http_client_util.cc
-    src/retry_policy.cc
     src/upload_request.cc
-    src/upload_worker.cc
+    src/uploader.cc
 )
 
 target_include_directories(squelch_uploader PUBLIC
@@ -94,11 +89,6 @@ set_target_properties(squelch_uploader PROPERTIES
     PREFIX ""
     OUTPUT_NAME "squelch_uploader"
 )
-
-if(SQUELCH_BUILD_TESTS)
-    enable_testing()
-    add_subdirectory(test)
-endif()
 
 install(TARGETS squelch_uploader
         LIBRARY DESTINATION lib/trunk-recorder/plugins)

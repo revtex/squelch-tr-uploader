@@ -5,9 +5,8 @@ Status: **scaffolding**. Builds and links; does not yet perform real uploads.
 ## Build
 
 ```bash
-cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DSQUELCH_BUILD_TESTS=ON
+cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
 cmake --build build --parallel
-ctest --test-dir build --output-on-failure
 ```
 
 Required system packages on Debian/Ubuntu:
@@ -15,7 +14,6 @@ Required system packages on Debian/Ubuntu:
 ```bash
 sudo apt-get install -y build-essential cmake \
     libcurl4-openssl-dev nlohmann-json3-dev \
-    libgtest-dev libgmock-dev \
     libboost-all-dev gnuradio-dev libssl-dev
 ```
 
@@ -45,11 +43,26 @@ Or copy the `.so` directly into TR's plugin search path.
       "apiKey": "tr-recorder-1.<key-secret>",
       "systemId": 1,
       "shortName": "MyCity",
-      "concurrency": 2
+      "unitTagsFile": "/etc/trunk-recorder/units.csv",
+      "maxRetries": 3
     }
   ]
 }
 ```
+
+Recognized config keys:
+
+- `server` (required) — Squelch base URL, `http(s)://…`.
+- `apiKey` (required) — Bearer token issued by Squelch.
+- `systemId` (required for uploads) — integer Squelch system id.
+- `shortName` (optional) — populates `systemLabel` on uploads.
+- `unitTagsFile` (optional) — path to TR's unit-tag CSV.
+- `maxRetries` (optional, default `3`, range `0..10`) — additional
+  attempts after the initial upload on transient failure (HTTP 408,
+  429, 5xx, network errors). 4xx is final.
+
+Uploads run on a single background thread with an unbounded in-process
+FIFO; on shutdown the plugin blocks until the queue has drained.
 
 The plugin discovers the TR Plugin_Api headers in this order:
 

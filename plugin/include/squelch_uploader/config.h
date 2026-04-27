@@ -37,13 +37,10 @@ namespace squelch
         std::optional<long> system_id; // optional (from JSON "systemId")
         std::string unit_tags_file;    // optional (from JSON "unitTagsFile")
 
-        // Upload worker pool tuning. Defaults are conservative; bounds are
-        // validated at parse time. From JSON keys `workers`,
-        // `queueCapacity`, `maxRetries`, `shutdownDrainSeconds`.
-        std::size_t worker_count = 2;            // 1..32
-        std::size_t queue_capacity = 64;         // 1..4096
-        unsigned max_retries = 3;                // 0..10
-        unsigned shutdown_drain_seconds = 10;    // 0..600
+        // Maximum retry attempts on transient failure (HTTP 408, 429, 5xx,
+        // network errors). 0 disables retry; bounds 0..10. From JSON
+        // `maxRetries`.
+        unsigned max_retries = 3;
 
         // Parses `data` into a Config. Returns std::nullopt and writes a
         // human-readable reason into *error on validation failure. *error is

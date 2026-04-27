@@ -75,8 +75,9 @@ uploads to a Squelch `/api/v1/calls` endpoint.
 ## Phase C-7 — Slim-down before v1.0.0 (NEW)
 
 > Before tagging v1.0.0, trim the plugin to match the size and shape of
-> rdioscanner_uploader. Tests stay through development, then are removed
-> at this phase along with the seams that exist only to support them.
+> TR's bundled uploaders. Tests stay through development, then are
+> removed at this phase along with the seams that exist only to support
+> them.
 
 - **Remove the test suite.** Delete `plugin/test/`, drop
   `enable_testing()` / `add_subdirectory(test)` from CMake, drop GoogleTest
@@ -90,13 +91,13 @@ uploads to a Squelch `/api/v1/calls` endpoint.
   `retry_policy.{h,cc}` and its test file.
 - **Replace the worker pool with a single background thread + unbounded
   `std::deque`.** TR produces calls at human speed (a few per second
-  worst case across all systems). A single thread with rdio's "retry on
-  the next call" model is plenty. Drop:
+  worst case across all systems). A single thread with a "retry on the
+  next call" model is plenty. Drop:
   - `workers` config key (always 1)
   - `queueCapacity` config key (queue is unbounded)
   - drop counter / `dropped()` accessor
   - drain-timeout / detach-stragglers logic — let `stop()` join the
-    thread; if the server is wedged we'll wait, same as rdio
+    thread; if the server is wedged we'll wait
 - **Fold `http_client_util` into the worker.** Tiny helper, single caller.
 - **Keep:** `config.{h,cc}` (validation has real ops value),
   `upload_request.{h,cc}` (wire-field map is non-trivial and worth its
