@@ -10,13 +10,6 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
-# Honour standard install paths (CMAKE_INSTALL_LIBDIR resolves to lib/lib64/
-# lib/<multiarch> per-distro). Trunk-Recorder loads plugins by basename via
-# boost::dll::shared_library::load() -> dlopen(), which only consults the
-# default dynamic-linker search path; installing into ${CMAKE_INSTALL_LIBDIR}
-# is what every other TR uploader plugin does.
-include(GNUInstallDirs)
-
 # ---------------------------------------------------------------------------
 # Trunk-Recorder Plugin_Api headers
 #
@@ -112,4 +105,4 @@ else()
 endif()
 
 install(TARGETS squelch_uploader
-        LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR})
+        LIBRARY DESTINATION ${CMAKE_INSTALL_PREFIX}/lib/trunk-recorder)

@@ -12,19 +12,20 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
   no SONAME, no version symlinks), matching Trunk-Recorder's bundled
   uploaders.
 - **Install:** `cmake --install` now installs `squelch_uploader.so` to
-  `${CMAKE_INSTALL_LIBDIR}` (e.g. `/usr/local/lib/`) instead of
-  `lib/trunk-recorder/plugins/`. Trunk-Recorder loads plugins by
-  basename via `boost::dll::shared_library::load()` → `dlopen()`, which
-  only consults the dynamic-linker search path; the previous default
-  required users to extend `LD_LIBRARY_PATH` or `ld.so.conf.d/` for the
-  plugin to be discovered. If you were relying on the old install path,
-  pass `-DCMAKE_INSTALL_LIBDIR=lib/trunk-recorder/plugins` and add that
-  directory to `ld.so.conf.d/` yourself.
+  `${CMAKE_INSTALL_PREFIX}/lib/trunk-recorder/` — the same directory
+  Trunk-Recorder's bundled uploaders use, and the path baked into the
+  `trunk-recorder` binary's `DT_RUNPATH`. The previous default
+  (`lib/trunk-recorder/plugins/`) had an extra `plugins/` subdirectory
+  that is not on TR's runpath, so `cmake --install` produced a plugin
+  TR could not load by basename. If you were relying on the old layout,
+  pass `-DCMAKE_INSTALL_PREFIX=...` to redirect, or copy the `.so`
+  yourself.
 
 ### Documentation
 
 - README “Install” section updated with the corrected destination and
-  an explanation of TR's basename-only plugin loader.
+  an explanation of how TR resolves plugin libraries by basename via
+  `boost::dll::shared_library::load()` → `dlopen()`.
 
 ## [0.2.0] — 2026-04-27
 
@@ -86,14 +87,14 @@ for Squelch.
 
 Plugin configuration block in `config.json`:
 
-| Key                  | Required | Default | Notes |
-|----------------------|----------|---------|-------|
-| `server`             | yes      | —       | Squelch base URL. Must be `http://` or `https://`. |
-| `apiKey`             | yes      | —       | Bearer token issued by Squelch. Never logged. |
-| `systemId`           | yes      | —       | Squelch system ID this Trunk-Recorder instance feeds. Must be a positive integer. |
-| `shortName`          | no       | —       | Trunk-Recorder system short name (informational, used in `systemLabel`). |
-| `unitTagsFile`       | no       | —       | Path to a TR `unitTagsFile`; used by TR to resolve `talkerAlias`. |
-| `maxRetries`         | no       | `3`     | Per-call retry budget. Range `0..10`. |
+| Key            | Required | Default | Notes                                                                             |
+| -------------- | -------- | ------- | --------------------------------------------------------------------------------- |
+| `server`       | yes      | —       | Squelch base URL. Must be `http://` or `https://`.                                |
+| `apiKey`       | yes      | —       | Bearer token issued by Squelch. Never logged.                                     |
+| `systemId`     | yes      | —       | Squelch system ID this Trunk-Recorder instance feeds. Must be a positive integer. |
+| `shortName`    | no       | —       | Trunk-Recorder system short name (informational, used in `systemLabel`).          |
+| `unitTagsFile` | no       | —       | Path to a TR `unitTagsFile`; used by TR to resolve `talkerAlias`.                 |
+| `maxRetries`   | no       | `3`     | Per-call retry budget. Range `0..10`.                                             |
 
 Invalid configuration fails fast at TR startup with a clear log message
 instead of silently continuing.
@@ -117,6 +118,6 @@ instead of silently continuing.
 ### Compatibility
 
 | `squelch-tr-uploader` | Squelch / OpenScanner            | Trunk-Recorder |
-|-----------------------|----------------------------------|----------------|
+| --------------------- | -------------------------------- | -------------- |
 | `0.2.0`               | ≥ 1.3.0 (native `/api/v1/calls`) | `v5.2.1`       |
 | `0.1.0`               | ≥ 1.3.0 (native `/api/v1/calls`) | `v5.2.1`       |

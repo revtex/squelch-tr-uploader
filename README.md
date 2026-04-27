@@ -27,7 +27,7 @@ own bundled uploaders.
 ## Compatibility
 
 | `squelch-tr-uploader` | Squelch / OpenScanner            | Trunk-Recorder |
-|-----------------------|----------------------------------|----------------|
+| --------------------- | -------------------------------- | -------------- |
 | `0.2.0`               | ≥ 1.3.0 (native `/api/v1/calls`) | `v5.2.1`       |
 | `0.1.0`               | ≥ 1.3.0 (native `/api/v1/calls`) | `v5.2.1`       |
 
@@ -68,18 +68,23 @@ The output is `plugin/build/squelch_uploader.so`.
 ## Install
 
 Trunk-Recorder loads plugins by basename via `boost::dll::shared_library::load()`
-(→ `dlopen()`), which only consults the dynamic-linker search path. The plugin
-must therefore live in a directory the linker scans by default — the same
-places where TR's bundled uploaders (`librdioscanner_uploader.so`, etc.) live.
+(→ `dlopen()`). The `trunk-recorder` binary is built with
+`DT_RUNPATH=${prefix}/lib/trunk-recorder`, and TR's bundled uploaders
+(`librdioscanner_uploader.so`, `libopenmhz_uploader.so`,
+`libbroadcastify_uploader.so`) all install there too — that is the canonical
+plugin directory.
 
 ```bash
-sudo install -m 0644 plugin/build/squelch_uploader.so /usr/lib/
-sudo ldconfig
+sudo install -m 0644 plugin/build/squelch_uploader.so \
+    /usr/local/lib/trunk-recorder/
 ```
 
 …or use `make install` / `cmake --install`, which installs to
-`<prefix>/${CMAKE_INSTALL_LIBDIR}/squelch_uploader.so` (e.g.
-`/usr/local/lib/squelch_uploader.so` with the default prefix).
+`<prefix>/lib/trunk-recorder/squelch_uploader.so` (default prefix
+`/usr/local`, so `/usr/local/lib/trunk-recorder/squelch_uploader.so`).
+
+If TR was built with `--prefix=/usr` (e.g. distro packages or some Docker
+images), drop the file in `/usr/lib/trunk-recorder/` instead.
 
 ## Configure
 
@@ -99,19 +104,19 @@ instance can route every TR system's calls to the matching Squelch
         {
           "systemId": 1,
           "shortName": "MARCSLake",
-          "unitTagsFile": "/etc/trunk-recorder/marcslake.csv"
+          "unitTagsFile": "/etc/trunk-recorder/marcslake.csv",
         },
         {
           "systemId": 2,
-          "shortName": "MARCSCuy"
+          "shortName": "MARCSCuy",
         },
         {
           "systemId": 3,
-          "shortName": "MARCSGea"
-        }
-      ]
-    }
-  ]
+          "shortName": "MARCSGea",
+        },
+      ],
+    },
+  ],
 }
 ```
 
@@ -122,15 +127,15 @@ unique within `systems[]`. Top-level `systemId` / `shortName` /
 `unitTagsFile` keys are not accepted — every routing field lives inside
 `systems[]`.
 
-| Key                     | Required | Default | Notes                                                                                                       |
-|-------------------------|----------|---------|-------------------------------------------------------------------------------------------------------------|
-| `server`                | yes      | —       | Squelch base URL. Must be `http://` or `https://`.                                                          |
-| `apiKey`                | yes      | —       | Bearer token issued by Squelch. Never logged.                                                               |
-| `systems[]`             | yes      | —       | Non-empty array of system routing entries (see below).                                                      |
-| `systems[].systemId`    | yes      | —       | Squelch system ID this TR system feeds. Positive integer.                                                   |
-| `systems[].shortName`   | yes      | —       | TR system short name; routing key. Unique within `systems[]`. Populates Squelch's `systemLabel`.            |
-| `systems[].unitTagsFile`| no       | —       | Path to TR's unit-tag CSV; lets TR resolve `talkerAlias` for uploads.                                       |
-| `maxRetries`            | no       | `3`     | Per-call retry budget after the initial attempt. Range `0..10`. Backoff is exponential with jitter, ≤ 30 s. |
+| Key                      | Required | Default | Notes                                                                                                       |
+| ------------------------ | -------- | ------- | ----------------------------------------------------------------------------------------------------------- |
+| `server`                 | yes      | —       | Squelch base URL. Must be `http://` or `https://`.                                                          |
+| `apiKey`                 | yes      | —       | Bearer token issued by Squelch. Never logged.                                                               |
+| `systems[]`              | yes      | —       | Non-empty array of system routing entries (see below).                                                      |
+| `systems[].systemId`     | yes      | —       | Squelch system ID this TR system feeds. Positive integer.                                                   |
+| `systems[].shortName`    | yes      | —       | TR system short name; routing key. Unique within `systems[]`. Populates Squelch's `systemLabel`.            |
+| `systems[].unitTagsFile` | no       | —       | Path to TR's unit-tag CSV; lets TR resolve `talkerAlias` for uploads.                                       |
+| `maxRetries`             | no       | `3`     | Per-call retry budget after the initial attempt. Range `0..10`. Backoff is exponential with jitter, ≤ 30 s. |
 
 Invalid configuration fails fast at TR startup with a clear log message
 rather than silently continuing.
@@ -163,19 +168,19 @@ by Trunk-Recorder; everything else is text fields. `startedAt` is RFC 3339 UTC
 
 ## Development
 
-| Target               | What it does                                          |
-|----------------------|-------------------------------------------------------|
-| `make` / `make build`| Configure (if needed) and build                       |
-| `make configure`     | Run cmake configure only                              |
-| `make rebuild`       | `distclean` + `build`                                 |
-| `make clean`         | `cmake --build … --target clean`                      |
-| `make distclean`     | Remove `plugin/build/`                                |
-| `make install`       | `cmake --install`                                     |
-| `make format`        | `clang-format -i` plugin sources                      |
-| `make format-check`  | Verify formatting without writing                     |
-| `make tidy`          | `clang-tidy -p plugin/build`                          |
-| `make cppcheck`      | cppcheck static analysis                              |
-| `make lint`          | `format-check` + `tidy` + `cppcheck`                  |
+| Target                | What it does                         |
+| --------------------- | ------------------------------------ |
+| `make` / `make build` | Configure (if needed) and build      |
+| `make configure`      | Run cmake configure only             |
+| `make rebuild`        | `distclean` + `build`                |
+| `make clean`          | `cmake --build … --target clean`     |
+| `make distclean`      | Remove `plugin/build/`               |
+| `make install`        | `cmake --install`                    |
+| `make format`         | `clang-format -i` plugin sources     |
+| `make format-check`   | Verify formatting without writing    |
+| `make tidy`           | `clang-tidy -p plugin/build`         |
+| `make cppcheck`       | cppcheck static analysis             |
+| `make lint`           | `format-check` + `tidy` + `cppcheck` |
 
 Variables: `BUILD_TYPE` (default `Debug`), `GENERATOR` (default `Ninja`),
 `JOBS=<N>`, `SQUELCH_TR_TAG=<tag>`.
