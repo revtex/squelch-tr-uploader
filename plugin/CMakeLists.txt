@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.20)
 project(squelch_uploader
-        VERSION 0.2.0
+        VERSION 0.2.1
         DESCRIPTION "Squelch uploader plugin for Trunk-Recorder"
         LANGUAGES CXX)
 
@@ -62,7 +62,10 @@ set(Boost_NO_BOOST_CMAKE ON)
 set(SQUELCH_BOOST_COMPONENTS log log_setup system filesystem regex thread)
 find_package(Boost REQUIRED COMPONENTS ${SQUELCH_BOOST_COMPONENTS})
 
-add_library(squelch_uploader SHARED
+# Build as a CMake MODULE library: dlopen-only, no SONAME, no version symlinks.
+# This matches Trunk-Recorder's own bundled uploaders (rdio-scanner, openmhz,
+# broadcastify) and avoids the SONAME bookkeeping that a SHARED library implies.
+add_library(squelch_uploader MODULE
     squelch_uploader.cc
 )
 
@@ -102,4 +105,4 @@ else()
 endif()
 
 install(TARGETS squelch_uploader
-        LIBRARY DESTINATION lib/trunk-recorder/plugins)
+        LIBRARY DESTINATION ${CMAKE_INSTALL_PREFIX}/lib/trunk-recorder)
