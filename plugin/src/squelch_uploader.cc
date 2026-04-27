@@ -12,7 +12,9 @@
 #include "squelch_uploader.h"
 #include "squelch_uploader/config.h"
 #include "squelch_uploader/http_client.h"
+#include "squelch_uploader/retry_policy.h"
 #include "squelch_uploader/upload_request.h"
+#include "squelch_uploader/upload_worker.h"
 
 #include "trunk-recorder/plugin_manager/plugin_api.h"
 
@@ -20,6 +22,7 @@
 #include <boost/log/trivial.hpp>
 #include <boost/shared_ptr.hpp>
 
+#include <chrono>
 #include <cstdint>
 #include <memory>
 #include <string>
@@ -39,7 +42,39 @@ namespace squelch
             return key.substr(0, 6) + "…";
         }
 
+        // libcurl-backed slot that owns one HttpClient per worker. Lives
+        // here (not in upload_worker.cc) so the test binary doesn't have to
+        // link libcurl.
+        class HttpUploaderSlot final : public UploaderSlot
+        {
+        public:
+            HttpUploaderSlot(std::string url, std::string token)
+                : url_(std::move(url)), token_(std::move(token)) {}
+
+            HttpResult upload(const UploadRequest &request) override
+            {
+                Multipart body;
+                request.to_multipart(body);
+                return client_.upload(url_, token_, body);
+            }
+
+        private:
+            std::string url_;
+            std::string token_;
+            HttpClient client_;
+        };
+
     } // namespace
+
+    UploaderFactory make_http_uploader_factory(std::string url,
+                                               std::string bearer_token)
+    {
+        return [url = std::move(url), token = std::move(bearer_token)]()
+                   -> std::unique_ptr<UploaderSlot>
+        {
+            return std::make_unique<HttpUploaderSlot>(url, token);
+        };
+    }
 
     class SquelchUploader : public Plugin_Api
     {
@@ -87,12 +122,52 @@ namespace squelch
         int start() override
         {
             BOOST_LOG_TRIVIAL(info) << "[" << kPluginName << "] start";
+
+            if (config_.server.empty() || config_.api_key.empty())
+            {
+                // parse_config should have caught this, but defend anyway.
+                BOOST_LOG_TRIVIAL(error)
+                    << "[" << kPluginName
+                    << "] start without server/apiKey; uploads disabled";
+                return 1;
+            }
+
+            RetryPolicy policy;
+            policy.max_attempts =
+                config_.max_retries == 0 ? 1u : config_.max_retries + 1u;
+            // Other policy fields keep their library defaults (1s base,
+            // 30s cap, 20% jitter). These are not exposed via JSON in v1
+            // because the defaults are a published part of the operator
+            // contract.
+
+            auto factory = make_http_uploader_factory(
+                build_upload_url(config_.server), config_.api_key);
+
+            pool_ = std::make_unique<UploadWorkerPool>(
+                config_.worker_count, config_.queue_capacity, policy,
+                std::move(factory));
+            pool_->start();
+            BOOST_LOG_TRIVIAL(info)
+                << "[" << kPluginName << "] worker pool started workers="
+                << config_.worker_count
+                << " queueCapacity=" << config_.queue_capacity
+                << " maxRetries=" << config_.max_retries;
             return 0;
         }
 
         int stop() override
         {
             BOOST_LOG_TRIVIAL(info) << "[" << kPluginName << "] stop";
+            if (pool_)
+            {
+                pool_->stop(std::chrono::seconds(
+                    config_.shutdown_drain_seconds));
+                BOOST_LOG_TRIVIAL(info)
+                    << "[" << kPluginName
+                    << "] worker pool stopped pending=" << pool_->pending()
+                    << " dropped=" << pool_->dropped();
+                pool_.reset();
+            }
             return 0;
         }
 
@@ -107,9 +182,6 @@ namespace squelch
 
         int call_end(Call_Data_t call_info) override
         {
-            // TODO: hand this off to a worker pool — currently uploads run
-            // synchronously on TR's call_end thread.
-
             if (!config_.system_id)
             {
                 BOOST_LOG_TRIVIAL(warning)
@@ -117,6 +189,15 @@ namespace squelch
                     << "] no systemId configured; skipping upload of "
                     << call_info.filename;
                 return 0;
+            }
+
+            if (!pool_)
+            {
+                BOOST_LOG_TRIVIAL(error)
+                    << "[" << kPluginName
+                    << "] worker pool not running; dropping upload of "
+                    << call_info.filename;
+                return 1;
             }
 
             // Pick the on-disk audio path the same way upstream rdioscanner
@@ -185,47 +266,21 @@ namespace squelch
             UploadRequest req =
                 UploadRequest::from_call_data(call, *config_.system_id);
 
-            Multipart body;
-            req.to_multipart(body);
+            UploadJob job;
+            job.request = std::move(req);
+            job.debug_tag = "tg=" + std::to_string(call.talkgroup) +
+                            " started=" + job.request.started_at +
+                            " bytes=" + std::to_string(audio_size);
 
-            const std::string url = build_upload_url(config_.server);
-            const HttpResult result =
-                http_client_->upload(url, config_.api_key, body);
-
-            if (!result.error_message.empty())
+            if (!pool_->enqueue(std::move(job)))
             {
                 BOOST_LOG_TRIVIAL(warning)
-                    << "[" << kPluginName << "] upload network error for "
-                    << call.audio_path << ": " << result.error_message;
-                // TODO: retry with exponential backoff.
+                    << "[" << kPluginName
+                    << "] queue full; dropped talkgroup=" << call.talkgroup
+                    << " dropped_total=" << pool_->dropped();
                 return 1;
             }
-
-            if (result.status_code >= 200 && result.status_code < 300)
-            {
-                BOOST_LOG_TRIVIAL(info)
-                    << "[" << kPluginName << "] uploaded call talkgroup="
-                    << call.talkgroup << " bytes=" << audio_size
-                    << " response=" << result.body;
-                return 0;
-            }
-
-            if (result.status_code >= 400 && result.status_code < 500)
-            {
-                BOOST_LOG_TRIVIAL(error)
-                    << "[" << kPluginName << "] upload rejected ("
-                    << result.status_code << ") for talkgroup="
-                    << call.talkgroup << ": " << result.body;
-                // 4xx is deterministic — don't retry.
-                return 1;
-            }
-
-            BOOST_LOG_TRIVIAL(warning)
-                << "[" << kPluginName << "] upload server error ("
-                << result.status_code << ") for talkgroup="
-                << call.talkgroup << ": " << result.body;
-            // TODO: retry with exponential backoff.
-            return 1;
+            return 0;
         }
 
         // ----- recorder / system / source setup --------------------------------
@@ -322,7 +377,7 @@ namespace squelch
 
     private:
         ::squelch::Config config_{};
-        std::unique_ptr<HttpClient> http_client_ = std::make_unique<HttpClient>();
+        std::unique_ptr<UploadWorkerPool> pool_;
     };
 
 } // namespace squelch

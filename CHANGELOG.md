@@ -8,6 +8,16 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ### Added
 
+- Uploads now run on a bounded background worker pool, so Trunk-Recorder's
+  recording loop never blocks on network I/O. Transient failures (HTTP 408,
+  429, 5xx, network errors) retry with exponential backoff plus jitter,
+  capped at 30 s per delay; 4xx validation errors are not retried. On
+  shutdown, in-flight uploads drain up to a configurable timeout before
+  TR exits.
+- New optional config keys: `workers` (default 2), `queueCapacity`
+  (default 64), `maxRetries` (default 3), `shutdownDrainSeconds`
+  (default 10). When the queue is full, calls are dropped with an error
+  log rather than blocking the recorder.
 - Plugin now uploads completed calls to Squelch via `POST /api/v1/calls`
   (multipart/form-data, `Authorization: Bearer`). Recordings larger than
   50 MiB are rejected locally with a clear log message.

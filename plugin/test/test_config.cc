@@ -126,3 +126,103 @@ TEST(ConfigParse, NonIntegerSystemIdIsError)
     EXPECT_FALSE(cfg.has_value());
     EXPECT_NE(err.find("systemId"), std::string::npos);
 }
+
+// ---- Worker-pool tuning ---------------------------------------------------
+
+TEST(ConfigParse, WorkerTuningDefaults)
+{
+    auto j = valid_blob();
+    std::string err;
+    auto cfg = Config::parse(j, &err);
+    ASSERT_TRUE(cfg.has_value()) << err;
+    EXPECT_EQ(cfg->worker_count, 2u);
+    EXPECT_EQ(cfg->queue_capacity, 64u);
+    EXPECT_EQ(cfg->max_retries, 3u);
+    EXPECT_EQ(cfg->shutdown_drain_seconds, 10u);
+}
+
+TEST(ConfigParse, WorkerTuningOverrides)
+{
+    auto j = valid_blob();
+    j["workers"] = 8;
+    j["queueCapacity"] = 256;
+    j["maxRetries"] = 5;
+    j["shutdownDrainSeconds"] = 30;
+    std::string err;
+    auto cfg = Config::parse(j, &err);
+    ASSERT_TRUE(cfg.has_value()) << err;
+    EXPECT_EQ(cfg->worker_count, 8u);
+    EXPECT_EQ(cfg->queue_capacity, 256u);
+    EXPECT_EQ(cfg->max_retries, 5u);
+    EXPECT_EQ(cfg->shutdown_drain_seconds, 30u);
+}
+
+TEST(ConfigParse, WorkersMustBeAtLeastOne)
+{
+    auto j = valid_blob();
+    j["workers"] = 0;
+    std::string err;
+    auto cfg = Config::parse(j, &err);
+    EXPECT_FALSE(cfg.has_value());
+    EXPECT_NE(err.find("workers"), std::string::npos);
+}
+
+TEST(ConfigParse, WorkersAboveBoundIsError)
+{
+    auto j = valid_blob();
+    j["workers"] = 33;
+    std::string err;
+    auto cfg = Config::parse(j, &err);
+    EXPECT_FALSE(cfg.has_value());
+    EXPECT_NE(err.find("workers"), std::string::npos);
+}
+
+TEST(ConfigParse, QueueCapacityAboveBoundIsError)
+{
+    auto j = valid_blob();
+    j["queueCapacity"] = 4097;
+    std::string err;
+    auto cfg = Config::parse(j, &err);
+    EXPECT_FALSE(cfg.has_value());
+    EXPECT_NE(err.find("queueCapacity"), std::string::npos);
+}
+
+TEST(ConfigParse, MaxRetriesAboveBoundIsError)
+{
+    auto j = valid_blob();
+    j["maxRetries"] = 11;
+    std::string err;
+    auto cfg = Config::parse(j, &err);
+    EXPECT_FALSE(cfg.has_value());
+    EXPECT_NE(err.find("maxRetries"), std::string::npos);
+}
+
+TEST(ConfigParse, ShutdownDrainAboveBoundIsError)
+{
+    auto j = valid_blob();
+    j["shutdownDrainSeconds"] = 601;
+    std::string err;
+    auto cfg = Config::parse(j, &err);
+    EXPECT_FALSE(cfg.has_value());
+    EXPECT_NE(err.find("shutdownDrainSeconds"), std::string::npos);
+}
+
+TEST(ConfigParse, MaxRetriesZeroIsValid)
+{
+    auto j = valid_blob();
+    j["maxRetries"] = 0;
+    std::string err;
+    auto cfg = Config::parse(j, &err);
+    ASSERT_TRUE(cfg.has_value()) << err;
+    EXPECT_EQ(cfg->max_retries, 0u);
+}
+
+TEST(ConfigParse, NonIntegerWorkersIsError)
+{
+    auto j = valid_blob();
+    j["workers"] = "two";
+    std::string err;
+    auto cfg = Config::parse(j, &err);
+    EXPECT_FALSE(cfg.has_value());
+    EXPECT_NE(err.find("workers"), std::string::npos);
+}

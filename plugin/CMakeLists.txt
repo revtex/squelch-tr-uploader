@@ -58,7 +58,9 @@ add_library(squelch_uploader SHARED
     src/config.cc
     src/http_client.cc
     src/http_client_util.cc
+    src/retry_policy.cc
     src/upload_request.cc
+    src/upload_worker.cc
 )
 
 target_include_directories(squelch_uploader PUBLIC

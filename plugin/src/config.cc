@@ -2,6 +2,7 @@
 
 #include "squelch_uploader/config.h"
 
+#include <cstdint>
 #include <string>
 
 namespace squelch
@@ -108,6 +109,74 @@ namespace squelch
 
         // unitTagsFile — optional.
         get_optional<std::string>(data, "unitTagsFile", cfg.unit_tags_file);
+
+        // Worker-pool tuning. All bounded; values out of range are rejected
+        // so the operator notices the typo at startup instead of seeing
+        // silent clamping.
+        auto parse_bounded_uint = [&](const char *key, std::uint64_t lo,
+                                      std::uint64_t hi, std::uint64_t &out_u64,
+                                      bool &present) -> bool
+        {
+            present = false;
+            auto it = data.find(key);
+            if (it == data.end() || it->is_null())
+                return true;
+            if (!it->is_number_integer() && !it->is_number_unsigned())
+            {
+                if (error)
+                    *error = std::string(key) + " must be an integer";
+                return false;
+            }
+            const auto raw = it->get<std::int64_t>();
+            if (raw < 0 || static_cast<std::uint64_t>(raw) < lo ||
+                static_cast<std::uint64_t>(raw) > hi)
+            {
+                if (error)
+                {
+                    *error = std::string(key) + " must be between " +
+                             std::to_string(lo) + " and " +
+                             std::to_string(hi) + " (got " +
+                             std::to_string(raw) + ")";
+                }
+                return false;
+            }
+            out_u64 = static_cast<std::uint64_t>(raw);
+            present = true;
+            return true;
+        };
+
+        {
+            std::uint64_t v = 0;
+            bool present = false;
+            if (!parse_bounded_uint("workers", 1, 32, v, present))
+                return std::nullopt;
+            if (present)
+                cfg.worker_count = static_cast<std::size_t>(v);
+        }
+        {
+            std::uint64_t v = 0;
+            bool present = false;
+            if (!parse_bounded_uint("queueCapacity", 1, 4096, v, present))
+                return std::nullopt;
+            if (present)
+                cfg.queue_capacity = static_cast<std::size_t>(v);
+        }
+        {
+            std::uint64_t v = 0;
+            bool present = false;
+            if (!parse_bounded_uint("maxRetries", 0, 10, v, present))
+                return std::nullopt;
+            if (present)
+                cfg.max_retries = static_cast<unsigned>(v);
+        }
+        {
+            std::uint64_t v = 0;
+            bool present = false;
+            if (!parse_bounded_uint("shutdownDrainSeconds", 0, 600, v, present))
+                return std::nullopt;
+            if (present)
+                cfg.shutdown_drain_seconds = static_cast<unsigned>(v);
+        }
 
         return cfg;
     }
