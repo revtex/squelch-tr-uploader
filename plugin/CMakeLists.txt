@@ -81,9 +81,15 @@ endif()
 
 set_target_properties(squelch_uploader PROPERTIES
     PREFIX ""
-    SUFFIX ".so"
     OUTPUT_NAME "squelch_uploader"
 )
+# Plugin filename convention: `.so` everywhere except macOS, where TR's
+# upstream releases use the platform-native `.dylib` suffix.
+if(APPLE)
+    set_target_properties(squelch_uploader PROPERTIES SUFFIX ".dylib")
+else()
+    set_target_properties(squelch_uploader PROPERTIES SUFFIX ".so")
+endif()
 
 install(TARGETS squelch_uploader
         LIBRARY DESTINATION lib/trunk-recorder/plugins)

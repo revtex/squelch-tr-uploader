@@ -32,21 +32,35 @@ jobs:
         include:
           - arch: linux-amd64
             runs-on: ubuntu-24.04
+            ext: so
           - arch: linux-arm64
             runs-on: ubuntu-24.04-arm
+            ext: so
+          - arch: darwin-arm64
+            runs-on: macos-14
+            ext: dylib
     runs-on: ${{ matrix.runs-on }}
     steps:
       - uses: actions/checkout@v4
         with:
           ref: ${{ github.event.inputs.tag || github.ref }}
 
-      - name: Install build deps
+      - name: Install build deps (Linux)
+        if: runner.os == 'Linux'
         run: |
           sudo apt-get update
           sudo apt-get install -y \
             build-essential cmake ninja-build \
             libcurl4-openssl-dev libssl-dev \
             libboost-all-dev
+
+      - name: Install build deps (macOS)
+        if: runner.os == 'macOS'
+        run: |
+          brew update
+          brew install cmake ninja boost
+          # libcurl ships with the SDK; Homebrew's `curl` is keg-only and
+          # not needed for build.
 
       - name: Configure
         run: cmake -S plugin -B plugin/build -G Ninja -DCMAKE_BUILD_TYPE=Release
@@ -57,13 +71,13 @@ jobs:
       - name: Stage artifact
         run: |
           mkdir -p dist
-          cp plugin/build/squelch_uploader.so \
-             dist/squelch_uploader-${{ matrix.arch }}.so
+          cp plugin/build/squelch_uploader.${{ matrix.ext }} \
+             dist/squelch_uploader-${{ matrix.arch }}.${{ matrix.ext }}
 
       - uses: actions/upload-artifact@v4
         with:
           name: squelch_uploader-${{ matrix.arch }}
-          path: dist/squelch_uploader-${{ matrix.arch }}.so
+          path: dist/squelch_uploader-${{ matrix.arch }}.${{ matrix.ext }}
           if-no-files-found: error
           retention-days: 7
 
@@ -95,9 +109,11 @@ jobs:
       - name: Collect release assets
         run: |
           mkdir -p dist
-          find artifacts -type f -name 'squelch_uploader-*.so' -exec cp {} dist/ \;
+          find artifacts -type f \
+            \( -name 'squelch_uploader-*.so' -o -name 'squelch_uploader-*.dylib' \) \
+            -exec cp {} dist/ \;
           ls -la dist
-          ( cd dist && sha256sum squelch_uploader-*.so > SHA256SUMS )
+          ( cd dist && sha256sum squelch_uploader-*.so squelch_uploader-*.dylib > SHA256SUMS )
           cat dist/SHA256SUMS
 
       - name: Extract release notes from CHANGELOG.md
@@ -138,4 +154,5 @@ jobs:
           files: |
             dist/squelch_uploader-linux-amd64.so
             dist/squelch_uploader-linux-arm64.so
+            dist/squelch_uploader-darwin-arm64.dylib
             dist/SHA256SUMS
