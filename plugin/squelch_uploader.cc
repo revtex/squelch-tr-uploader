@@ -5,8 +5,8 @@
 // Single translation unit, modelled on TR's bundled uploaders under
 // `trunk-recorder/plugins/`. Everything lives here:
 //
-//   * `parse_config` (validation of server / apiKey / shortName / systemId /
-//     unitTagsFile / maxRetries)
+//   * `parse_config` (validation of server / apiKey / maxRetries plus the
+//     `systems[]` array of { systemId, shortName, unitTagsFile? } entries)
 //   * the libcurl multipart POST to `<server>/api/v1/calls`
 //   * RFC 3339 / JSON / 50 MiB pre-flight projection of TR's `Call_Data_t`
 //   * a single background upload thread with retry+backoff
@@ -62,7 +62,7 @@ namespace
     // ---------------------------------------------------------------------
 
     constexpr const char *kPluginName = "squelch_uploader";
-    constexpr const char *kPluginVersion = "0.1.0";
+    constexpr const char *kPluginVersion = "0.2.0";
 
     // Squelch v1's upload-route ceiling. Files larger than this are rejected
     // before opening a connection.
@@ -71,27 +71,46 @@ namespace
     // ---------------------------------------------------------------------
     // Parsed plugin configuration
     //
-    // The Squelch uploader's TR config sub-object looks roughly like:
+    // Every plugin entry uses a `systems[]` array so a single instance can
+    // fan out to one or more TR systems served by the same Squelch host:
     //
     //   {
-    //     "name":         "squelch_uploader",
-    //     "library":      "/usr/lib/trunk-recorder/plugins/squelch_uploader.so",
-    //     "server":       "https://squelch.example.com",
-    //     "apiKey":       "sk_live_…",
-    //     "shortName":    "local",
-    //     "systemId":     1234,
-    //     "unitTagsFile": "/etc/trunk-recorder/units.csv",
-    //     "maxRetries":   3
+    //     "name":       "squelch_uploader",
+    //     "library":    "/usr/lib/trunk-recorder/plugins/squelch_uploader.so",
+    //     "server":     "https://squelch.example.com",
+    //     "apiKey":     "sk_live_…",
+    //     "maxRetries": 3,
+    //     "systems": [
+    //       {
+    //         "systemId": 1,
+    //         "shortName": "MARCSLake",
+    //         "unitTagsFile": "/etc/trunk-recorder/marcslake.csv"
+    //       },
+    //       { "systemId": 2, "shortName": "MARCSCuy" },
+    //       { "systemId": 3, "shortName": "MARCSGea" }
+    //     ]
     //   }
+    //
+    // Each completed call is routed to the matching entry by TR's
+    // `call_info.short_name`; calls whose short_name is not listed are
+    // dropped (logged at debug level) rather than uploaded. shortName
+    // values must be unique within `systems[]`.
     // ---------------------------------------------------------------------
+
+    struct SystemEntry
+    {
+        long system_id = 0;         // required, positive (JSON "systemId")
+        std::string short_name;     // required + unique (JSON "shortName")
+        std::string unit_tags_file; // optional (JSON "unitTagsFile")
+    };
 
     struct PluginConfig
     {
-        std::string server;            // required, http(s) URL
-        std::string api_key;           // required, non-empty (JSON "apiKey")
-        std::string short_name;        // optional (JSON "shortName")
-        long system_id = 0;            // required, positive (JSON "systemId")
-        std::string unit_tags_file;    // optional (JSON "unitTagsFile")
+        std::string server;  // required, http(s) URL
+        std::string api_key; // required, non-empty (JSON "apiKey")
+
+        // One entry per `systems[]` element. Always non-empty on success.
+        std::vector<SystemEntry> systems;
 
         // Maximum retry attempts on transient failure (HTTP 408, 429, 5xx,
         // network errors). 0 disables retry; bounds 0..10.
@@ -175,36 +194,129 @@ namespace
             }
         }
 
-        // shortName — optional.
-        get_optional_string<std::string>(data, "shortName", cfg.short_name);
-
-        // systemId — required, positive integer.
+        // systems[] — required, non-empty array of routing entries. Top-
+        // level systemId / shortName / unitTagsFile are not accepted; each
+        // entry must carry its own.
         {
-            auto it = data.find("systemId");
-            if (it == data.end() || it->is_null())
+            const auto systems_it = data.find("systems");
+            if (systems_it == data.end() || systems_it->is_null())
             {
                 if (error)
-                    *error = "missing required field: systemId";
+                    *error = "missing required field: systems";
                 return std::nullopt;
             }
-            if (!it->is_number_integer())
+            if (!systems_it->is_array())
             {
                 if (error)
-                    *error = "systemId must be an integer";
+                    *error = "systems must be a JSON array";
                 return std::nullopt;
             }
-            cfg.system_id = it->get<long>();
-            if (cfg.system_id <= 0)
+            if (systems_it->empty())
             {
                 if (error)
-                    *error = "systemId must be a positive integer";
+                    *error = "systems must not be empty";
                 return std::nullopt;
+            }
+
+            for (const char *legacy : {"systemId", "shortName", "unitTagsFile"})
+            {
+                if (data.contains(legacy) && !data.at(legacy).is_null())
+                {
+                    if (error)
+                    {
+                        *error = std::string("top-level '") + legacy +
+                                 "' is not supported; move it into a "
+                                 "systems[] entry";
+                    }
+                    return std::nullopt;
+                }
+            }
+
+            cfg.systems.reserve(systems_it->size());
+
+            for (std::size_t i = 0; i < systems_it->size(); ++i)
+            {
+                const auto &el = (*systems_it)[i];
+                const std::string idx = "systems[" + std::to_string(i) + "]";
+                if (!el.is_object())
+                {
+                    if (error)
+                        *error = idx + " must be an object";
+                    return std::nullopt;
+                }
+
+                SystemEntry entry;
+
+                // systemId — required, positive integer.
+                {
+                    auto sid = el.find("systemId");
+                    if (sid == el.end() || sid->is_null())
+                    {
+                        if (error)
+                            *error = idx + " missing required field: systemId";
+                        return std::nullopt;
+                    }
+                    if (!sid->is_number_integer())
+                    {
+                        if (error)
+                            *error = idx + ".systemId must be an integer";
+                        return std::nullopt;
+                    }
+                    entry.system_id = sid->get<long>();
+                    if (entry.system_id <= 0)
+                    {
+                        if (error)
+                        {
+                            *error = idx +
+                                     ".systemId must be a positive integer";
+                        }
+                        return std::nullopt;
+                    }
+                }
+
+                // shortName — required and used as the routing key, so it
+                // must be non-empty and unique within the array.
+                {
+                    auto sn = el.find("shortName");
+                    if (sn == el.end() || !sn->is_string())
+                    {
+                        if (error)
+                        {
+                            *error = idx +
+                                     " missing required string field: "
+                                     "shortName";
+                        }
+                        return std::nullopt;
+                    }
+                    entry.short_name = sn->get<std::string>();
+                    if (entry.short_name.empty())
+                    {
+                        if (error)
+                            *error = idx + ".shortName must not be empty";
+                        return std::nullopt;
+                    }
+                    for (const auto &prior : cfg.systems)
+                    {
+                        if (prior.short_name == entry.short_name)
+                        {
+                            if (error)
+                            {
+                                *error =
+                                    "duplicate shortName '" +
+                                    entry.short_name + "' in systems[]";
+                            }
+                            return std::nullopt;
+                        }
+                    }
+                }
+
+                // unitTagsFile — optional.
+                get_optional_string<std::string>(el, "unitTagsFile",
+                                                 entry.unit_tags_file);
+
+                cfg.systems.push_back(std::move(entry));
             }
         }
-
-        // unitTagsFile — optional.
-        get_optional_string<std::string>(data, "unitTagsFile",
-                                         cfg.unit_tags_file);
 
         // maxRetries — optional, range 0..10.
         {
@@ -960,11 +1072,19 @@ namespace squelch
                 return 1;
             }
             config_ = std::move(*parsed);
+            std::ostringstream sys_summary;
+            for (std::size_t i = 0; i < config_.systems.size(); ++i)
+            {
+                if (i != 0)
+                    sys_summary << ", ";
+                sys_summary << config_.systems[i].short_name
+                            << "=" << config_.systems[i].system_id;
+            }
             BOOST_LOG_TRIVIAL(info)
                 << "[" << kPluginName << "] config parsed: server="
-                << config_.server << " apiKey=" << ::redact(config_.api_key)
-                << " shortName='" << config_.short_name << "'"
-                << " systemId=" << config_.system_id;
+                << config_.server << " apiKey="
+                << ::redact(config_.api_key) << " systems=["
+                << sys_summary.str() << "]";
             return 0;
         }
 
@@ -1039,6 +1159,29 @@ namespace squelch
                 return 1;
             }
 
+            // Route to the matching SystemEntry by exact shortName. Calls
+            // for systems not listed in `systems[]` are dropped at debug
+            // level so a single plugin entry can fan out to a subset of
+            // TR's systems.
+            const ::SystemEntry *entry = nullptr;
+            for (const auto &s : config_.systems)
+            {
+                if (s.short_name == call_info.short_name)
+                {
+                    entry = &s;
+                    break;
+                }
+            }
+            if (entry == nullptr)
+            {
+                BOOST_LOG_TRIVIAL(debug)
+                    << "[" << kPluginName
+                    << "] dropping call for unconfigured system '"
+                    << call_info.short_name << "' (tg="
+                    << call_info.talkgroup << ")";
+                return 0;
+            }
+
             // Pick the on-disk audio path the way TR exposes it: use the
             // compressed file when call_info.compress_wav is set, otherwise
             // the raw `filename`.
@@ -1055,11 +1198,13 @@ namespace squelch
             job.talkgroup_group = call_info.talkgroup_group;
             job.audio_path = call_info.compress_wav ? call_info.converted
                                                     : call_info.filename;
-            job.short_name = call_info.short_name;
+            // shortName is required per entry, so always send the
+            // configured value as `systemLabel`.
+            job.short_name = entry->short_name;
             job.patched_talkgroups = std::vector<unsigned long>(
                 call_info.patched_talkgroups.begin(),
                 call_info.patched_talkgroups.end());
-            job.system_id = config_.system_id;
+            job.system_id = entry->system_id;
 
             job.transmission_source_list.reserve(
                 call_info.transmission_source_list.size());
