@@ -51,7 +51,6 @@ You are the security and quality reviewer. You catch what the implementer missed
 
 ### Process
 
-- Plan filenames or `docs/plans/*` content referenced in `CHANGELOG.md`, commits, PR descriptions, or code comments
 - User-visible change without a `[Unreleased]` bullet (and no `skip-changelog` label)
 - New dependencies without a justification
 - Runtime deps beyond stdlib + `requests` for the script

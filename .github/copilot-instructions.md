@@ -31,7 +31,7 @@ script/                    ← Python upload script
   upload.py
   tests/
 docs/
-  plans/                   ← gitignored local working notes
+  plans/                   ← committed planning docs (build-out plan, etc.)
 .devcontainer/             ← dev container setup (cmake/ninja/python toolchains)
 .github/
   agents/                  ← expert agents per domain
@@ -97,16 +97,10 @@ When a request touches both plugin and script (e.g. "add a new field"), run **C+
 - Do not commit or push unless the user asks.
 - Version-pinning: `pyproject.toml` for Python, `CMakeLists.txt` `find_package(... REQUIRED)` for C++.
 
-## Local-only planning docs (`docs/plans/`)
+## Planning docs (`docs/plans/`)
 
-- The entire `docs/plans/` directory is **gitignored**. Files there are local working notes only.
-- Never reference plan filenames or contents in:
-  - `CHANGELOG.md`
-  - committed docs
-  - commit messages
-  - PR titles or descriptions
-  - code comments
-- When asked to write a plan, place it under `docs/plans/` and do not stage or commit it.
+- Planning docs live under `docs/plans/` and are **committed** to the repo so contributors can follow the build-out roadmap.
+- `CHANGELOG.md` bullets still describe **what changed in the product**, not which plan phase shipped — link to the plan only when it adds operator-relevant context.
 
 ## Changelog & Releases
 

@@ -31,6 +31,3 @@ build/
 # Local config
 .env
 *.local
-
-# Local-only planning notes (see .github/copilot-instructions.md)
-docs/plans/
