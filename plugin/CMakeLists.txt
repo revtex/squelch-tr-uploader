@@ -52,14 +52,7 @@ set(SQUELCH_BOOST_COMPONENTS log log_setup system filesystem regex thread)
 find_package(Boost REQUIRED COMPONENTS ${SQUELCH_BOOST_COMPONENTS})
 
 add_library(squelch_uploader SHARED
-    src/squelch_uploader.cc
-    src/config.cc
-    src/upload_request.cc
-    src/uploader.cc
-)
-
-target_include_directories(squelch_uploader PUBLIC
-    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
+    squelch_uploader.cc
 )
 
 # TR's headers — PRIVATE because consumers of our shared library should not
@@ -87,6 +80,7 @@ endif()
 
 set_target_properties(squelch_uploader PROPERTIES
     PREFIX ""
+    SUFFIX ".so"
     OUTPUT_NAME "squelch_uploader"
 )
 

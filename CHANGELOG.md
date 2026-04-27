@@ -6,61 +6,83 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ## [Unreleased]
 
-### Changed
+## [0.1.0] — initial release
 
-- The plugin's internal architecture has been simplified to match the
-  shape of TR's bundled uploaders: a single background uploader thread
-  with an unbounded in-process queue. Retries on transient failures
-  (HTTP 408, 429, 5xx, network errors) still use exponential backoff
-  with jitter. The `workers`, `queueCapacity`, and
-  `shutdownDrainSeconds` config keys have been removed; only
-  `maxRetries` (default 3) remains.
+First public release of `squelch_uploader.so`, the Trunk-Recorder plugin
+for Squelch.
 
-### Removed
+### Plugin
 
-- The Python fallback uploader (`script/upload.py`) is no longer part of
-  this repo. The plugin is the only supported delivery path. Use TR's
-  built-in `uploadScript` hook with your own script if you need a
-  non-plugin path.
-- `workers`, `queueCapacity`, `shutdownDrainSeconds` config keys.
-  Behaviour is now: one uploader thread, unbounded queue, blocking
-  shutdown until the queue is drained.
+- Loads inside Trunk-Recorder via the `Plugin_Api`. Drop
+  `squelch_uploader.so` into TR's plugin search path and add a `plugins`
+  entry to `config.json`.
+- Built against Trunk-Recorder `v5.2.1` headers, pulled at configure
+  time via CMake `FetchContent` (override with `-DSQUELCH_TR_TAG=...`).
+- Single background uploader thread; the TR recording loop never blocks
+  on network I/O.
 
-### Added
+### Uploads
 
-- Uploads now include `talkerAlias` whenever Trunk-Recorder has resolved
-  a unit alias (from `unitTagsFile` or over-the-air alias decode) for
-  the call's primary unit. Empty/unknown aliases are simply omitted.
-- Uploads now run on a background uploader thread, so Trunk-Recorder's
-  recording loop never blocks on network I/O. Transient failures (HTTP
-  408, 429, 5xx, network errors) retry with exponential backoff plus
-  jitter, capped at 30 s per delay; 4xx validation errors are not
-  retried. On shutdown the plugin blocks until the in-process queue has
-  drained.
-- New optional config key: `maxRetries` (default 3, range 0..10).
-- Plugin now uploads completed calls to Squelch via `POST /api/v1/calls`
-  (multipart/form-data, `Authorization: Bearer`). Recordings larger than
-  50 MiB are rejected locally with a clear log message.
-- Mapped Trunk-Recorder call metadata onto the Squelch field map
-  (`systemId`, `talkgroupId`, `startedAt` as RFC 3339 UTC, `frequencyHz`,
-  `durationMs`, `unitId`, `talkerAlias`, `talkgroupLabel`/`Tag`/`Group`/`Name`,
-  `errorCount`/`spikeCount`, plus `sources`/`frequencies`/`patches` as JSON).
-- TLS verification is on by default; there is no insecure-mode flag.
-- Plugin now builds against Trunk-Recorder's real `Plugin_Api`. Headers are
-  pulled at CMake configure time via `FetchContent`, pinned to `v5.2.1` (override
-  with `-DSQUELCH_TR_TAG=...`).
-- `squelch_uploader.so` exports a `create_plugin` factory via `BOOST_DLL_ALIAS`,
-  matching Trunk-Recorder's loader contract. Drop the `.so` into TR's plugin
-  directory and reference it from your TR `config.json` `plugins` block.
-- Plugin configuration block: `server`, `apiKey`, `shortName`, optional
-  `systemId`, optional `unitTagsFile`. The server URL is required and must use
-  `http://` or `https://`; `apiKey` is required. Invalid configuration now fails
-  fast at TR startup with a clear log message instead of silently continuing.
-- Lifecycle hooks (`init`, `start`, `stop`, `setup_*`, `unit_*`, `call_start`,
-  `call_end`) are wired through. `call_end` currently logs the call it would
-  upload — actual multipart `POST /api/v1/calls` arrives in the next release.
-- Devcontainer ships the build dependencies needed for the plugin
-  (`libboost-all-dev`, `gnuradio-dev`, `libssl-dev`) so `cmake --build
-  plugin/build` works out of the box.
-- `THIRD_PARTY_NOTICES.md` documents the Trunk-Recorder GPL-3.0-or-later
-  upstream, and this changelog file is now part of the repo.
+- Posts each completed call to `<server>/api/v1/calls` as
+  `multipart/form-data` with `Authorization: Bearer <api-key>`.
+- TR call metadata is mapped onto Squelch's wire contract:
+  `systemId`, `talkgroupId`, `startedAt` (RFC 3339 UTC), `frequencyHz`,
+  `durationMs`, `unitId`, `talkerAlias`,
+  `talkgroupLabel`/`talkgroupTag`/`talkgroupGroup`/`talkgroupName`,
+  `systemLabel`, `errorCount`, `spikeCount`, and the `sources`,
+  `frequencies`, and `patches` JSON arrays. Optional fields are omitted
+  rather than sent empty.
+- `talkerAlias` is auto-populated whenever Trunk-Recorder has resolved
+  a unit alias (via `unitTagsFile` or over-the-air alias decode) for
+  the call's primary unit.
+- Audio is uploaded as the WAV or M4A produced by Trunk-Recorder; the
+  plugin picks the compressed file when `compress_wav` is set,
+  otherwise the raw recording.
+- Recordings larger than 50 MiB are rejected locally before any
+  connection is opened, with a clear log message.
+- Transient failures (HTTP 408, 429, 5xx, and network errors) are
+  retried with exponential backoff plus jitter, capped at 30 s per
+  delay. Validation errors (4xx other than 408 / 429) are not retried.
+  When the retry budget is exhausted, the call is logged and dropped —
+  uploads never block the recorder indefinitely.
+- On `stop()`, the plugin blocks until the in-process upload queue has
+  drained, so a clean Trunk-Recorder shutdown also flushes pending
+  uploads.
+
+### Configuration
+
+Plugin configuration block in `config.json`:
+
+| Key                  | Required | Default | Notes |
+|----------------------|----------|---------|-------|
+| `server`             | yes      | —       | Squelch base URL. Must be `http://` or `https://`. |
+| `apiKey`             | yes      | —       | Bearer token issued by Squelch. Never logged. |
+| `systemId`           | no       | —       | Squelch system ID this Trunk-Recorder instance feeds. Calls are skipped (with a log message) when this is unset. |
+| `shortName`          | no       | —       | Trunk-Recorder system short name (informational, used in `systemLabel`). |
+| `unitTagsFile`       | no       | —       | Path to a TR `unitTagsFile`; used by TR to resolve `talkerAlias`. |
+| `maxRetries`         | no       | `3`     | Per-call retry budget. Range `0..10`. |
+
+Invalid configuration fails fast at TR startup with a clear log message
+instead of silently continuing.
+
+### Security
+
+- TLS verification is on by default. There is no insecure-mode flag.
+- The API key is treated as a secret — never logged, never echoed in
+  error messages, never written into request URLs or query parameters.
+- HTTP redirects are not followed.
+
+### Build & distribution
+
+- C++17, CMake ≥3.20, Ninja, libcurl, Boost (log, dll, system,
+  filesystem, regex, thread). nlohmann-json comes via TR.
+- Single source file (`plugin/squelch_uploader.cc`) with a small
+  `CMakeLists.txt`, in line with Trunk-Recorder's bundled uploaders.
+- GPL-3.0-or-later, matching Trunk-Recorder. See
+  `THIRD_PARTY_NOTICES.md` for upstream attributions.
+
+### Compatibility
+
+| `squelch-tr-uploader` | Squelch / OpenScanner            | Trunk-Recorder |
+|-----------------------|----------------------------------|----------------|
+| `0.1.0`               | ≥ 1.3.0 (native `/api/v1/calls`) | `v5.2.1`       |
