@@ -6,6 +6,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
         build-essential cmake ninja-build pkg-config \
         libcurl4-openssl-dev nlohmann-json3-dev \
         libgtest-dev libgmock-dev \
+        libboost-all-dev gnuradio-dev libssl-dev \
         python3 python3-venv python3-pip python3-dev \
         ripgrep jq \
         ca-certificates curl gnupg \

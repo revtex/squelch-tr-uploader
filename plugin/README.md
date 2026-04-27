@@ -15,8 +15,15 @@ Required system packages on Debian/Ubuntu:
 ```bash
 sudo apt-get install -y build-essential cmake \
     libcurl4-openssl-dev nlohmann-json3-dev \
-    libgtest-dev libgmock-dev
+    libgtest-dev libgmock-dev \
+    libboost-all-dev gnuradio-dev libssl-dev
 ```
+
+> `libboost-all-dev` and `gnuradio-dev` are pulled in transitively by
+> Trunk-Recorder's `Plugin_Api` headers (boost::log, boost::dll,
+> gnuradio types in `gr_blocks/decoder_wrapper.h`). They're heavy — a
+> trimmed package set is feasible but not yet pinned. The devcontainer
+> already installs them.
 
 ## Install
 

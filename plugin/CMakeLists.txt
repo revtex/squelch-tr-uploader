@@ -46,8 +46,16 @@ set(SQUELCH_TR_INCLUDE_DIR "${trunk_recorder_SOURCE_DIR}"
 find_package(CURL REQUIRED)
 find_package(nlohmann_json 3 QUIET)
 
+# Boost — TR's Plugin_Api transitively pulls in boost/log, boost/program_options,
+# boost/property_tree, etc. We export the plugin factory with BOOST_DLL_ALIAS,
+# which expects boost::dll headers (header-only) plus boost_log for the runtime
+# logging used by parse_config / lifecycle hooks.
+set(SQUELCH_BOOST_COMPONENTS log log_setup system filesystem regex thread)
+find_package(Boost REQUIRED COMPONENTS ${SQUELCH_BOOST_COMPONENTS})
+
 add_library(squelch_uploader SHARED
     src/squelch_uploader.cc
+    src/config.cc
 )
 
 target_include_directories(squelch_uploader PUBLIC
@@ -55,13 +63,22 @@ target_include_directories(squelch_uploader PUBLIC
 )
 
 # TR's headers — PRIVATE because consumers of our shared library should not
-# transitively pick up TR's include tree.
+# transitively pick up TR's include tree. TR's plugin_api.h does
+# `#include <json.hpp>` (no nlohmann/ prefix) so we add TR's `lib/` directory
+# too — it ships nlohmann's single-header copy there.
 target_include_directories(squelch_uploader PRIVATE
     ${SQUELCH_TR_INCLUDE_DIR}
+    ${SQUELCH_TR_INCLUDE_DIR}/lib
 )
 
 target_link_libraries(squelch_uploader PRIVATE
     CURL::libcurl
+    Boost::log
+    Boost::log_setup
+    Boost::system
+    Boost::filesystem
+    Boost::regex
+    Boost::thread
 )
 
 if(nlohmann_json_FOUND)

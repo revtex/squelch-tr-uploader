@@ -6,4 +6,23 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ## [Unreleased]
 
-- Pin Trunk-Recorder `Plugin_Api` headers via CMake `FetchContent` (currently `v5.2.1`).
+### Added
+
+- Plugin now builds against Trunk-Recorder's real `Plugin_Api`. Headers are
+  pulled at CMake configure time via `FetchContent`, pinned to `v5.2.1` (override
+  with `-DSQUELCH_TR_TAG=...`).
+- `squelch_uploader.so` exports a `create_plugin` factory via `BOOST_DLL_ALIAS`,
+  matching Trunk-Recorder's loader contract (drop the `.so` into TR's plugin
+  directory the same way you would `rdioscanner_uploader.so`).
+- Plugin configuration block: `server`, `apiKey`, `shortName`, optional
+  `systemId`, optional `unitTagsFile`. The server URL is required and must use
+  `http://` or `https://`; `apiKey` is required. Invalid configuration now fails
+  fast at TR startup with a clear log message instead of silently continuing.
+- Lifecycle hooks (`init`, `start`, `stop`, `setup_*`, `unit_*`, `call_start`,
+  `call_end`) are wired through. `call_end` currently logs the call it would
+  upload — actual multipart `POST /api/v1/calls` arrives in the next release.
+- Devcontainer ships the build dependencies needed for the plugin
+  (`libboost-all-dev`, `gnuradio-dev`, `libssl-dev`) so `cmake --build
+  plugin/build` works out of the box.
+- `THIRD_PARTY_NOTICES.md` documents the Trunk-Recorder GPL-3.0-or-later
+  upstream, and this changelog file is now part of the repo.
