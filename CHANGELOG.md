@@ -15,6 +15,9 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ### Added
 
+- Uploads now include `talkerAlias` whenever Trunk-Recorder has resolved
+  a unit alias (from `unitTagsFile` or over-the-air alias decode) for
+  the call's primary unit. Empty/unknown aliases are simply omitted.
 - Uploads now run on a bounded background worker pool, so Trunk-Recorder's
   recording loop never blocks on network I/O. Transient failures (HTTP 408,
   429, 5xx, network errors) retry with exponential backoff plus jitter,

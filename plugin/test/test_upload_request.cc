@@ -158,6 +158,42 @@ TEST(UploadRequestMapping, UnitIdAbsentWhenAllZero)
     EXPECT_FALSE(req.unit_id.has_value());
 }
 
+TEST(UploadRequestMapping, TalkerAliasMatchesUnitId)
+{
+    CallData c;
+    c.audio_path = "/tmp/x.wav";
+    c.transmission_source_list = {
+        CallSourceLite{0, 0, 0, 0, false, "", "ignored"},
+        CallSourceLite{1234, 0, 0, 0, false, "", "Unit 7"},
+        CallSourceLite{5678, 0, 0, 0, false, "", "Unit 99"},
+    };
+    const auto req = UploadRequest::from_call_data(c, 1);
+    ASSERT_TRUE(req.unit_id.has_value());
+    EXPECT_EQ(*req.unit_id, 1234);
+    EXPECT_EQ(req.talker_alias, "Unit 7");
+}
+
+TEST(UploadRequestMapping, TalkerAliasEmptyWhenNoTag)
+{
+    CallData c;
+    c.audio_path = "/tmp/x.wav";
+    c.transmission_source_list = {
+        CallSourceLite{1234, 0, 0, 0, false, "", ""}};
+    const auto req = UploadRequest::from_call_data(c, 1);
+    EXPECT_TRUE(req.talker_alias.empty());
+}
+
+TEST(UploadRequestMapping, TalkerAliasEmptyWhenUnitIdAbsent)
+{
+    CallData c;
+    c.audio_path = "/tmp/x.wav";
+    c.transmission_source_list = {
+        CallSourceLite{0, 0, 0, 0, false, "", "stale"}};
+    const auto req = UploadRequest::from_call_data(c, 1);
+    EXPECT_FALSE(req.unit_id.has_value());
+    EXPECT_TRUE(req.talker_alias.empty());
+}
+
 TEST(UploadRequestMapping, TalkgroupStrings)
 {
     const auto call = make_sample_call("/tmp/x.wav");
@@ -255,12 +291,12 @@ TEST(UploadRequestMultipart, RequiredAndOptionalFields)
     EXPECT_EQ(find_string(m, "talkgroupGroup")->value, "Public Safety");
     EXPECT_EQ(find_string(m, "talkgroupName")->value, "Police Dispatch 1");
     EXPECT_EQ(find_string(m, "systemLabel")->value, "Metro");
+    EXPECT_EQ(find_string(m, "talkerAlias")->value, "Unit 7");
     EXPECT_TRUE(has_string(m, "sources"));
     EXPECT_TRUE(has_string(m, "frequencies"));
     EXPECT_TRUE(has_string(m, "patches"));
 
     // Optional unset strings must NOT be sent (no empty values on the wire).
-    EXPECT_FALSE(has_string(m, "talkerAlias"));
     EXPECT_FALSE(has_string(m, "site"));
     EXPECT_FALSE(has_string(m, "channel"));
     EXPECT_FALSE(has_string(m, "decoder"));

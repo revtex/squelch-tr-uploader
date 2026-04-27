@@ -166,6 +166,24 @@ namespace squelch
             return std::nullopt;
         }
 
+        // Look up the talker-alias tag attached to the source matching
+        // `unit_id`. TR resolves unit_tags / OTA aliases into Call_Source.tag
+        // before call_end fires, so we don't keep our own cache.
+        std::string
+        alias_for_unit(const std::vector<CallSourceLite> &sources,
+                       std::optional<std::int64_t> unit_id)
+        {
+            if (!unit_id)
+                return {};
+            for (const auto &s : sources)
+            {
+                if (static_cast<std::int64_t>(s.source) == *unit_id &&
+                    !s.tag.empty())
+                    return s.tag;
+            }
+            return {};
+        }
+
     } // namespace
 
     std::string to_rfc3339_utc(std::time_t epoch_s)
@@ -247,6 +265,8 @@ namespace squelch
         }
 
         req.unit_id = first_unit_id(call.transmission_source_list);
+        req.talker_alias =
+            alias_for_unit(call.transmission_source_list, req.unit_id);
 
         if (call.error_count > 0)
             req.error_count = static_cast<std::int64_t>(call.error_count);
