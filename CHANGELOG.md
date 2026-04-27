@@ -6,6 +6,13 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ## [Unreleased]
 
+### Removed
+
+- The Python fallback uploader (`script/upload.py`) is no longer part of
+  this repo. The plugin is the only supported delivery path. Use TR's
+  built-in `uploadScript` hook with your own script if you need a
+  non-plugin path.
+
 ### Added
 
 - Uploads now run on a bounded background worker pool, so Trunk-Recorder's

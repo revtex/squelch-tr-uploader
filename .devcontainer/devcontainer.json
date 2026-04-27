@@ -16,17 +16,11 @@
   ],
   "postCreateCommand": "bash .devcontainer/post-create.sh",
   "remoteUser": "vscode",
-  "containerEnv": {
-    "PIP_BREAK_SYSTEM_PACKAGES": "0"
-  },
   "customizations": {
     "vscode": {
       "extensions": [
         "ms-vscode.cpptools",
         "ms-vscode.cmake-tools",
-        "ms-python.python",
-        "ms-python.mypy-type-checker",
-        "charliermarsh.ruff",
         "github.vscode-github-actions",
         "github.copilot",
         "github.copilot-chat"
@@ -34,9 +28,7 @@
       "settings": {
         "editor.formatOnSave": true,
         "C_Cpp.default.cppStandard": "c++17",
-        "cmake.configureOnOpen": false,
-        "python.defaultInterpreterPath": "${workspaceFolder}/script/.venv/bin/python",
-        "python.terminal.activateEnvironment": true
+        "cmake.configureOnOpen": false
       }
     }
   }

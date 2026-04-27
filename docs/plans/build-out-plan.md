@@ -6,15 +6,13 @@
 ## Goal
 
 Take the current scaffolding (CI-green, no real upload logic) to a v1.0.0
-release: a working C++ Trunk-Recorder plugin and a working Python fallback
-script, both producing wire-identical multipart uploads to a Squelch
-`/api/v1/calls` endpoint.
+release: a working C++ Trunk-Recorder plugin that produces multipart
+uploads to a Squelch `/api/v1/calls` endpoint.
 
 ## Phase 0 — Scaffolding (DONE)
 
 - ✅ Repo created, GPL-3.0, dev branch, CI green
 - ✅ C++ skeleton (CMake + plugin source stub + 2 gtest scaffolds)
-- ✅ Python skeleton (pyproject + upload.py stub + 7 pytest tests)
 - ✅ Devcontainer, copilot-instructions, expert agents, this plan
 
 ## Phase C-1 — Vendor TR's Plugin_Api
@@ -58,12 +56,12 @@ script, both producing wire-identical multipart uploads to a Squelch
 
 ## Phase C-5 — Unit registration auto-populate
 
-- On `unit_registration`, if `talker_alias` is set, surface it in the next
-  upload's `talkerAlias` field
-- This is a UX nicety — Squelch's auto-populate handles the system/talkgroup
-  side; this fills the operator name in
-- gtest: a registration followed by a call_end produces a multipart body with
-  the right `talkerAlias`
+- On `unit_registration`, cache `unit_id → talker_alias` in a small
+  thread-safe map (LRU or bounded by entry count, e.g. 4096).
+- In `call_end`, look up the cached alias for the call's `source` /
+  `unit_id` and emit it as `talkerAlias` on the upload.
+- Keep it inline in `squelch_uploader.cc` — no new module, no interface.
+- Skip dedicated tests; this is exercised by the live smoke test in C-6.
 
 ## Phase C-6 — Release plumbing
 
@@ -74,50 +72,63 @@ script, both producing wire-identical multipart uploads to a Squelch
 - Release notes drawn from CHANGELOG.md `[Unreleased]` section
 - Compatibility matrix in README.md updated by the release PR
 
-## Phase PY-1 — Real upload in upload.py
+## Phase C-7 — Slim-down before v1.0.0 (NEW)
 
-- Currently `build_request()` returns a dataclass; the script doesn't actually
-  POST yet
-- Add a `send_request(req: UploadRequest) -> UploadResult` that POSTs via
-  `requests.Session` with timeouts and retries
-- pytest with `responses` covers happy path + 4xx + 5xx + timeout
+> Before tagging v1.0.0, trim the plugin to match the size and shape of
+> rdioscanner_uploader. Tests stay through development, then are removed
+> at this phase along with the seams that exist only to support them.
 
-## Phase PY-2 — Env-var credentials & CLI polish
+- **Remove the test suite.** Delete `plugin/test/`, drop
+  `enable_testing()` / `add_subdirectory(test)` from CMake, drop GoogleTest
+  from `FetchContent`, drop the `plugin-test` CI job. Keep `plugin-build`.
+- **Collapse the `IHttpClient` interface + factory injection.** It only
+  exists so gtest can swap in a fake. Delete the interface, the factory
+  parameter on `UploadWorkerPool`, and the `http_client.h` indirection.
+  One concrete `HttpClient` class, owned directly by the worker.
+- **Fold `retry_policy` into the worker.** Move the ~30 lines of backoff
+  math and `is_retriable()` into `upload_worker.cc`. Delete
+  `retry_policy.{h,cc}` and its test file.
+- **Replace the worker pool with a single background thread + unbounded
+  `std::deque`.** TR produces calls at human speed (a few per second
+  worst case across all systems). A single thread with rdio's "retry on
+  the next call" model is plenty. Drop:
+  - `workers` config key (always 1)
+  - `queueCapacity` config key (queue is unbounded)
+  - drop counter / `dropped()` accessor
+  - drain-timeout / detach-stragglers logic — let `stop()` join the
+    thread; if the server is wedged we'll wait, same as rdio
+- **Fold `http_client_util` into the worker.** Tiny helper, single caller.
+- **Keep:** `config.{h,cc}` (validation has real ops value),
+  `upload_request.{h,cc}` (wire-field map is non-trivial and worth its
+  own module), and `squelch_uploader.cc` (the plugin entry point).
+- **Result target:** plugin/src/ down from ~7 files to ~3
+  (`squelch_uploader.cc`, `config.cc`, `upload_request.cc` — uploader
+  thread lives inside `squelch_uploader.cc` or a small `uploader.cc`).
+- **Validation:** plugin loads in TR, performs a real upload to a Squelch
+  dev server, drops a call cleanly when the server is down, recovers when
+  it comes back. No automated tests after this phase.
 
-- `--server` / `--api-key` accept env-var defaults (`SQUELCH_URL`,
-  `SQUELCH_API_KEY`)
-- `--dry-run` prints prepared request, exits 0
-- `--debug` enables DEBUG logging
-- Documented exit codes (0/1/2)
+## Phase X — Wire-contract cross-check (one-shot)
 
-## Phase PY-3 — Retry & backoff
-
-- Same retry budget as the C++ plugin: 3 attempts, exp backoff with jitter
-- `requests.adapters.HTTPAdapter` with `Retry()` for 5xx; manual handling for
-  network errors
-- `--max-retries` flag overrides default
-
-## Phase X — Wire-contract cross-check (CI)
-
-- Once both formats render real multipart bodies:
-  - Add `tools/diff_wire.py` that runs the plugin's gtest dump output and the
-    script's pytest dump output through a normalizer
-  - CI job `wire-contract-diff` fails on mismatch
-- Use the **Wire Contract Expert** agent to audit before tagging v1.0.0
+- Before the slim-down phase (C-7), while tests still exist: capture a
+  multipart body from the plugin's gtest dump and diff it byte-by-byte
+  against the documented wire contract. Manual diff is fine — this is a
+  one-shot pre-release gate, not a CI job.
 
 ## v1.0.0 acceptance
 
 - C++ plugin successfully uploads a real recording from a TR install to a
   Squelch dev server
-- Python script does the same, dropped into the same TR config as
-  `uploadScript`
-- Both produce identical multipart bodies for the same fixture
+- Plugin multipart body has been diffed once (Phase X) against the
+  documented wire contract and matches
+- Test suite has been removed (Phase C-7)
 - Compatibility matrix in README pinned to a tested TR + Squelch combo
-- Documentation in `plugin/README.md` and `script/README.md` covers install,
-  config, troubleshooting
+- `plugin/README.md` covers install, config, and troubleshooting
 
 ## Out of scope for v1.x
 
+- A separate Python uploader. The repo is plugin-only by design — TR's
+  `uploadScript` mechanism is not a supported delivery path here.
 - Pre-recording metadata (we get everything from `call_end`)
 - Live transcription (Squelch handles that server-side)
 - Multi-server fan-out (one TR plugin → one Squelch server; users wanting

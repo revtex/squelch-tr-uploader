@@ -2,20 +2,11 @@
 
 First-party Trunk-Recorder uploader for [Squelch](https://github.com/revtex/squelch) (currently developed as [revtex/OpenScanner](https://github.com/revtex/OpenScanner)). Uploads completed calls to Squelch's native `/api/v1/calls` endpoint with `Authorization: Bearer <api-key>`.
 
-> **Status:** Scaffolding. The plugin and script are skeletons; not yet feature-complete.
+> **Status:** Pre-release. Working uploader with multipart `/api/v1/calls` POSTs and a background uploader thread; not yet tagged 1.0.
 
-This repository ships **two** delivery formats:
-
-| Format | Location | When to use |
-|---|---|---|
-| **C++ TR plugin** (`squelch_uploader.so`) | [plugin/](plugin/) | Recommended. Loads inside Trunk-Recorder, integrates via TR's `Plugin_Api` (same model as the built-in `rdioscanner_uploader`). |
-| **Python upload script** (`upload.py`) | [script/](script/) | Fallback for platforms where loading a `.so` is awkward (e.g. NAS deployments). Runs as TR's `uploadScript`. |
-
-Both target the same wire contract: the multipart shape documented in [Squelch's native-API plan §5](https://github.com/revtex/OpenScanner/blob/dev/docs/plans/native-api-design-plan.md#5-multipart-call-upload-field-map).
+Delivered as a Trunk-Recorder C++ plugin (`squelch_uploader.so`) under [plugin/](plugin/). It loads inside TR via the `Plugin_Api`, the same way as the built-in `rdioscanner_uploader`. The wire contract is the multipart shape documented in [Squelch's native-API plan §5](https://github.com/revtex/OpenScanner/blob/dev/docs/plans/native-api-design-plan.md#5-multipart-call-upload-field-map).
 
 ## Quick install
-
-### C++ plugin (recommended)
 
 ```bash
 # Build
@@ -39,10 +30,6 @@ Add to your TR `config.json`:
   }]
 }
 ```
-
-### Python script (fallback)
-
-See [script/README.md](script/README.md).
 
 ## Compatibility
 

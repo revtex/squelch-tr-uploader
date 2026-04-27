@@ -1,13 +1,11 @@
 FROM mcr.microsoft.com/devcontainers/cpp:1-debian-12
 
-# Build deps for the C++ Trunk-Recorder plugin (libcurl, JSON, gtest) and a
-# modern Python toolchain for the script fallback.
+# Build deps for the C++ Trunk-Recorder plugin (libcurl, JSON, gtest).
 RUN apt-get update && apt-get install -y --no-install-recommends \
         build-essential cmake ninja-build pkg-config \
         libcurl4-openssl-dev nlohmann-json3-dev \
         libgtest-dev libgmock-dev \
         libboost-all-dev gnuradio-dev libssl-dev \
-        python3 python3-venv python3-pip python3-dev \
         ripgrep jq \
         ca-certificates curl gnupg \
     && rm -rf /var/lib/apt/lists/*
@@ -20,8 +18,8 @@ RUN curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg \
     && apt-get update && apt-get install -y --no-install-recommends gh \
     && rm -rf /var/lib/apt/lists/*
 
-# Pin a tested ruff/mypy/pytest set so contributors get the same CI
-# environment locally. Pinned via the post-create hook — see post-create.sh.
+# Pin a tested toolchain for contributors via the post-create hook
+# — see post-create.sh.
 
 # Ensure /tmp is world-writable with the sticky bit and pre-create the
 # X11 forwarding socket dir. Under Podman rootless the base image's /tmp
