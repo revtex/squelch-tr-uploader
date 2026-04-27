@@ -6,6 +6,14 @@
   "features": {
     "ghcr.io/devcontainers/features/git:1": {}
   },
+  // Mount /tmp as a fresh tmpfs with the sticky bit at container start.
+  // Without this, the devcontainer features-install step leaves /tmp at
+  // 755 root:root, which blocks VS Code's credential-helper script and
+  // Pyright's tmpdir from being created by the non-root `vscode` user.
+  "runArgs": [
+    "--tmpfs",
+    "/tmp:rw,exec,nosuid,nodev,mode=1777,size=1g"
+  ],
   "postCreateCommand": "bash .devcontainer/post-create.sh",
   "remoteUser": "vscode",
   "containerEnv": {
@@ -16,7 +24,6 @@
       "extensions": [
         "ms-vscode.cpptools",
         "ms-vscode.cmake-tools",
-        "twxs.cmake",
         "ms-python.python",
         "ms-python.mypy-type-checker",
         "charliermarsh.ruff",

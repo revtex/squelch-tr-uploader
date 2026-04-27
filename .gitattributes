@@ -1,0 +1,30 @@
+# Default: text files normalized to LF in the repo, auto-detected on checkout.
+* text=auto eol=lf
+
+# Shell / config / source — always LF.
+*.sh        text eol=lf
+*.py        text eol=lf
+*.cc        text eol=lf
+*.h         text eol=lf
+*.hpp       text eol=lf
+*.cpp       text eol=lf
+*.cmake     text eol=lf
+CMakeLists.txt text eol=lf
+*.json      text eol=lf
+*.jsonc     text eol=lf
+*.yml       text eol=lf
+*.yaml      text eol=lf
+*.toml      text eol=lf
+*.md        text eol=lf
+
+# Binary — never touch.
+*.so        binary
+*.dylib     binary
+*.dll       binary
+*.a         binary
+*.o         binary
+*.png       binary
+*.jpg       binary
+*.gif       binary
+*.zip       binary
+*.tar.gz    binary
