@@ -10,6 +10,13 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
+# Honour standard install paths (CMAKE_INSTALL_LIBDIR resolves to lib/lib64/
+# lib/<multiarch> per-distro). Trunk-Recorder loads plugins by basename via
+# boost::dll::shared_library::load() -> dlopen(), which only consults the
+# default dynamic-linker search path; installing into ${CMAKE_INSTALL_LIBDIR}
+# is what every other TR uploader plugin does.
+include(GNUInstallDirs)
+
 # ---------------------------------------------------------------------------
 # Trunk-Recorder Plugin_Api headers
 #
@@ -62,7 +69,10 @@ set(Boost_NO_BOOST_CMAKE ON)
 set(SQUELCH_BOOST_COMPONENTS log log_setup system filesystem regex thread)
 find_package(Boost REQUIRED COMPONENTS ${SQUELCH_BOOST_COMPONENTS})
 
-add_library(squelch_uploader SHARED
+# Build as a CMake MODULE library: dlopen-only, no SONAME, no version symlinks.
+# This matches Trunk-Recorder's own bundled uploaders (rdio-scanner, openmhz,
+# broadcastify) and avoids the SONAME bookkeeping that a SHARED library implies.
+add_library(squelch_uploader MODULE
     squelch_uploader.cc
 )
 
@@ -102,4 +112,4 @@ else()
 endif()
 
 install(TARGETS squelch_uploader
-        LIBRARY DESTINATION lib/trunk-recorder/plugins)
+        LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR})

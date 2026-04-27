@@ -67,15 +67,19 @@ The output is `plugin/build/squelch_uploader.so`.
 
 ## Install
 
-Drop the `.so` into Trunk-Recorder's plugin search path:
+Trunk-Recorder loads plugins by basename via `boost::dll::shared_library::load()`
+(→ `dlopen()`), which only consults the dynamic-linker search path. The plugin
+must therefore live in a directory the linker scans by default — the same
+places where TR's bundled uploaders (`librdioscanner_uploader.so`, etc.) live.
 
 ```bash
-sudo install -m 0644 plugin/build/squelch_uploader.so \
-    /etc/trunk-recorder/plugins/
+sudo install -m 0644 plugin/build/squelch_uploader.so /usr/lib/
+sudo ldconfig
 ```
 
-…or use `make install`, which installs to
-`<prefix>/lib/trunk-recorder/plugins/squelch_uploader.so`.
+…or use `make install` / `cmake --install`, which installs to
+`<prefix>/${CMAKE_INSTALL_LIBDIR}/squelch_uploader.so` (e.g.
+`/usr/local/lib/squelch_uploader.so` with the default prefix).
 
 ## Configure
 
