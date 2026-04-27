@@ -11,12 +11,37 @@ set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 
 option(SQUELCH_BUILD_TESTS "Build unit tests" OFF)
 
-# Trunk-Recorder Plugin_Api headers must be on the include path. For now we
-# accept them being injected via TR_PLUGIN_API_INCLUDE; future work will vendor
-# a pinned copy under third_party/.
-if(DEFINED ENV{TR_PLUGIN_API_INCLUDE})
-    include_directories($ENV{TR_PLUGIN_API_INCLUDE})
+# ---------------------------------------------------------------------------
+# Trunk-Recorder Plugin_Api headers
+#
+# We need a small subset of TR's public headers to compile against `Plugin_Api`.
+# Rather than vendor a snapshot in our git tree, we pull the upstream source
+# at configure time via FetchContent and put TR's `lib/` on the include path.
+#
+# Pinned to an exact tag so contributors get a reproducible build. Bump
+# SQUELCH_TR_TAG to refresh; CMake will re-fetch into the build dir.
+# ---------------------------------------------------------------------------
+set(SQUELCH_TR_REPO  "https://github.com/robotastic/trunk-recorder.git"
+    CACHE STRING "Trunk-Recorder upstream repo")
+set(SQUELCH_TR_TAG   "v5.2.1"
+    CACHE STRING "Trunk-Recorder tag/branch/commit to compile against")
+
+include(FetchContent)
+FetchContent_Declare(
+    trunk_recorder
+    GIT_REPOSITORY ${SQUELCH_TR_REPO}
+    GIT_TAG        ${SQUELCH_TR_TAG}
+    GIT_SHALLOW    TRUE
+    GIT_PROGRESS   TRUE
+)
+# We only need headers — never invoke TR's CMakeLists.
+FetchContent_GetProperties(trunk_recorder)
+if(NOT trunk_recorder_POPULATED)
+    FetchContent_Populate(trunk_recorder)
 endif()
+
+set(SQUELCH_TR_INCLUDE_DIR "${trunk_recorder_SOURCE_DIR}"
+    CACHE INTERNAL "Path to Trunk-Recorder public headers (root contains trunk-recorder/)")
 
 find_package(CURL REQUIRED)
 find_package(nlohmann_json 3 QUIET)
@@ -27,6 +52,12 @@ add_library(squelch_uploader SHARED
 
 target_include_directories(squelch_uploader PUBLIC
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
+)
+
+# TR's headers — PRIVATE because consumers of our shared library should not
+# transitively pick up TR's include tree.
+target_include_directories(squelch_uploader PRIVATE
+    ${SQUELCH_TR_INCLUDE_DIR}
 )
 
 target_link_libraries(squelch_uploader PRIVATE
