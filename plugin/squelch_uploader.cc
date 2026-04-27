@@ -301,9 +301,11 @@ namespace
         return s;
     }
 
-    // Map an audio-file extension (case-insensitive) to its MIME type per
-    // the Squelch wire contract. Unknown extensions return
-    // "application/octet-stream".
+    // Map an audio-file extension (case-insensitive) to its MIME type.
+    // Trunk-Recorder only ever hands us a `.wav` (raw recording) or a
+    // `.m4a` (when `compress_wav` is enabled), so those are the only
+    // cases we recognise. Anything else falls back to a generic
+    // `application/octet-stream` rather than guessing.
     std::string audio_content_type_for(const std::string &path)
     {
         const auto dot = path.find_last_of('.');
@@ -312,16 +314,8 @@ namespace
         const std::string ext = to_lower(path.substr(dot + 1));
         if (ext == "wav")
             return "audio/wav";
-        if (ext == "mp3")
-            return "audio/mpeg";
-        if (ext == "aac")
-            return "audio/aac";
         if (ext == "m4a")
             return "audio/m4a";
-        if (ext == "ogg")
-            return "audio/ogg";
-        if (ext == "opus")
-            return "audio/opus";
         return "application/octet-stream";
     }
 

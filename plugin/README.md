@@ -1,79 +1,73 @@
-# Squelch C++ plugin for Trunk-Recorder
+# Squelch Trunk-Recorder plugin
 
-Status: **scaffolding**. Builds and links; does not yet perform real uploads.
+This directory builds `squelch_uploader.so`, the Trunk-Recorder plugin that
+posts completed calls to Squelch's `/api/v1/calls` endpoint.
 
-## Build
+For installation, configuration, and the wire contract, see the
+[top-level README](../README.md). This file covers plugin internals and
+direct CMake usage.
+
+## Layout
+
+```
+plugin/
+├── CMakeLists.txt        ← single CMake target, fetches TR headers
+├── README.md             ← (this file)
+└── squelch_uploader.cc   ← entire plugin (single source file)
+```
+
+The plugin matches the shape of Trunk-Recorder's bundled uploaders under
+`plugins/` upstream — one `.cc` per plugin, no public headers.
+
+## Direct CMake build
 
 ```bash
-cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
-cmake --build build --parallel
+cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release
+cmake --build build
 ```
 
-Required system packages on Debian/Ubuntu:
+Output: `build/squelch_uploader.so`.
 
-```bash
-sudo apt-get install -y build-essential cmake \
-    libcurl4-openssl-dev nlohmann-json3-dev \
-    libboost-all-dev gnuradio-dev libssl-dev
-```
+The repo root has a [`Makefile`](../Makefile) that wraps this with
+`make build`, `make rebuild`, `make lint`, etc.
 
-> `libboost-all-dev` and `gnuradio-dev` are pulled in transitively by
-> Trunk-Recorder's `Plugin_Api` headers (boost::log, boost::dll,
-> gnuradio types in `gr_blocks/decoder_wrapper.h`). They're heavy — a
-> trimmed package set is feasible but not yet pinned. The devcontainer
-> already installs them.
+### CMake variables
 
-## Install
+| Variable             | Default       | Purpose                                                       |
+|----------------------|---------------|---------------------------------------------------------------|
+| `SQUELCH_TR_REPO`    | `robotastic/trunk-recorder` | Trunk-Recorder upstream URL.                    |
+| `SQUELCH_TR_TAG`     | `v5.2.1`      | TR tag/branch/commit whose `Plugin_Api` headers we compile against. |
+| `CMAKE_BUILD_TYPE`   | (unset)       | Standard CMake build type.                                    |
 
-```bash
-sudo cmake --install build --prefix /usr/local
-# → /usr/local/lib/trunk-recorder/plugins/squelch_uploader.so
-```
+TR headers are fetched via `FetchContent_Populate` at configure time; we
+never invoke TR's own `CMakeLists.txt`. The headers go on the include
+path as `${trunk_recorder_SOURCE_DIR}` and `…/lib` (the latter for TR's
+bundled `<json.hpp>`).
 
-Or copy the `.so` directly into TR's plugin search path.
+## Internals
 
-## Trunk-Recorder config snippet
+Everything lives in `squelch_uploader.cc` in three logical sections:
 
-```jsonc
-{
-  "plugins": [
-    {
-      "library": "squelch_uploader.so",
-      "server": "https://squelch.example.com",
-      "apiKey": "tr-recorder-1.<key-secret>",
-      "systemId": 1,
-      "shortName": "MyCity",
-      "unitTagsFile": "/etc/trunk-recorder/units.csv",
-      "maxRetries": 3
-    }
-  ]
-}
-```
+1. **`Config` + parser** — pulls plugin keys out of TR's
+   `boost::property_tree` config, validates `server`/`apiKey`, and bounds
+   `maxRetries`.
+2. **`Uploader`** — owns the libcurl handle (RAII), runs a single
+   background thread draining an unbounded `std::deque`, builds the
+   multipart body via `curl_mime`, and applies retry/backoff for
+   transient failures (HTTP 408/429/5xx + network errors).
+3. **`SquelchUploader : Plugin_Api`** — the TR-facing class. Exports
+   `create()` through `BOOST_DLL_ALIAS(... , create_plugin)` so TR's
+   plugin loader can instantiate it.
 
-Recognized config keys:
+The plugin runs inside TR's process — a crash takes TR down. Errors are
+caught and logged internally; nothing is allowed to escape across the
+ABI boundary.
 
-- `server` (required) — Squelch base URL, `http(s)://…`.
-- `apiKey` (required) — Bearer token issued by Squelch.
-- `systemId` (required for uploads) — integer Squelch system id.
-- `shortName` (optional) — populates `systemLabel` on uploads.
-- `unitTagsFile` (optional) — path to TR's unit-tag CSV.
-- `maxRetries` (optional, default `3`, range `0..10`) — additional
-  attempts after the initial upload on transient failure (HTTP 408,
-  429, 5xx, network errors). 4xx is final.
+## Conventions
 
-Uploads run on a single background thread with an unbounded in-process
-FIFO; on shutdown the plugin blocks until the queue has drained.
-
-The plugin discovers the TR Plugin_Api headers in this order:
-
-1. `TR_PLUGIN_API_INCLUDE` environment variable (development).
-2. Vendored copy under `third_party/trunk-recorder/` (release builds — TBD).
-
-## Roadmap
-
-- [ ] Vendor pinned TR `Plugin_Api.h` set
-- [ ] Implement `parse_config`
-- [ ] Implement `call_end` → multipart POST to `/api/v1/calls`
-- [ ] Bounded worker queue with retry/backoff
-- [ ] Optional `setup_recorder` / `unit_registration` auto-populate hooks
-- [ ] Per-arch GitHub Releases (`linux-amd64`, `linux-arm64`, `darwin-arm64`)
+- C++17, no exceptions across the plugin boundary.
+- RAII for all owned resources; never `curl_easy_cleanup` outside a dtor.
+- Public symbols in `namespace squelch`; only `extern "C"` factory
+  functions cross the ABI.
+- Match the shape of TR's bundled uploaders — keep this single-file. New
+  helpers belong in the anonymous namespace, not in new translation units.
