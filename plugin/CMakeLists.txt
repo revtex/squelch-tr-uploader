@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.20)
 project(squelch_uploader
-        VERSION 0.2.1
+        VERSION 0.2.2
         DESCRIPTION "Squelch uploader plugin for Trunk-Recorder"
         LANGUAGES CXX)
 
