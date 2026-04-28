@@ -6,6 +6,28 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ## [Unreleased]
 
+## [0.2.3] — 2026-04-28
+
+### Fixed
+
+- **Plugin load:** the v0.2.2 build linked Boost.Log via the
+  `Boost::log` imported target, but the modern Linux default
+  `-Wl,--as-needed` linker flag dropped libboost_log (and the rest of
+  the Boost components) from `DT_NEEDED` because every reference into
+  Boost.Log came from inlined template expansions of
+  `BOOST_LOG_TRIVIAL`, which the linker treats as weak. ld.so therefore
+  never loaded `libboost_log.so.1.83.0` into the trunk-recorder process
+  and the first log call aborted with:
+
+  ```
+  trunk-recorder: symbol lookup error:
+      /usr/local/lib/trunk-recorder/squelch_uploader.so:
+      undefined symbol: _ZN5boost3log12v2s_mt_posix7trivial6logger3getEv
+  ```
+
+  Pass `-Wl,--no-as-needed` so every Boost component we explicitly
+  link against ends up in `DT_NEEDED` and is loaded at runtime.
+
 ## [0.2.2] — 2026-04-28
 
 ### Fixed
@@ -37,7 +59,7 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
   (`lib/trunk-recorder/plugins/`) had an extra `plugins/` subdirectory
   that is not on TR's runpath, so following the README produced a
   plugin TR could not load (`boost::dll::shared_library::load() failed:
-  cannot open shared object file`). If you were relying on the old
+cannot open shared object file`). If you were relying on the old
   layout, pass `-DCMAKE_INSTALL_PREFIX=...` to redirect, or copy the
   `.so` yourself.
 

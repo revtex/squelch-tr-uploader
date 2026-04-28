@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.20)
 project(squelch_uploader
-        VERSION 0.2.2
+        VERSION 0.2.3
         DESCRIPTION "Squelch uploader plugin for Trunk-Recorder"
         LANGUAGES CXX)
 
@@ -90,6 +90,31 @@ target_link_libraries(squelch_uploader PRIVATE
 
 if(nlohmann_json_FOUND)
     target_link_libraries(squelch_uploader PRIVATE nlohmann_json::nlohmann_json)
+endif()
+
+# Force every explicitly-linked dependency into DT_NEEDED.
+#
+# Modern Linux toolchains pass `-Wl,--as-needed` by default. Boost.Log's
+# `BOOST_LOG_TRIVIAL` macro expands into heavily templated code: the only
+# references the plugin's translation units make to libboost_log.so are
+# weak undefined symbols emitted from inline template instantiations. The
+# linker treats those as "not strongly required" and drops libboost_log
+# (and its companions log_setup / thread / system / filesystem / regex)
+# from DT_NEEDED entirely. The plugin builds and links cleanly, but at
+# runtime ld.so never loads libboost_log.so into the trunk-recorder
+# process, and the first BOOST_LOG_TRIVIAL call dies with:
+#
+#   trunk-recorder: symbol lookup error:
+#       /usr/local/lib/trunk-recorder/squelch_uploader.so:
+#       undefined symbol:
+#       _ZN5boost3log12v2s_mt_posix7trivial6logger3getEv
+#       (boost::log::v2s_mt_posix::trivial::logger::get())
+#
+# `--no-as-needed` keeps a DT_NEEDED entry for every shared library on
+# the link line regardless of how its symbols are referenced. We don't
+# pass any libs we don't actually use, so this is safe.
+if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
+    target_link_options(squelch_uploader PRIVATE "LINKER:--no-as-needed")
 endif()
 
 set_target_properties(squelch_uploader PROPERTIES
