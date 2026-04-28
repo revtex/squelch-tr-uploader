@@ -6,6 +6,26 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ## [Unreleased]
 
+## [0.2.2] — 2026-04-28
+
+### Fixed
+
+- **Plugin load:** the v0.2.1 build referenced TR's global
+  `frequency_format` symbol (defined in `trunk_recorder_library`'s
+  `formatter.cc`). Because we build out-of-tree (TR headers via
+  FetchContent, no link against `trunk_recorder_library`), that
+  reference was an undefined symbol that `dlopen()` could not resolve
+  against the visibility-hidden `trunk-recorder` executable, producing:
+
+  ```
+  boost::dll::shared_library::load() failed: undefined symbol: frequency_format
+  ```
+
+  The assignment was leftover boilerplate copied from TR's bundled
+  plugins; the squelch uploader emits `frequencyHz` as a plain integer
+  via its own stringstreams and never calls TR's `format_freq()`
+  helper, so it never needed the global. Removed.
+
 ## [0.2.1] — 2026-04-27
 
 ### Fixed

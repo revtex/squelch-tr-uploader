@@ -62,7 +62,7 @@ namespace
     // ---------------------------------------------------------------------
 
     constexpr const char *kPluginName = "squelch_uploader";
-    constexpr const char *kPluginVersion = "0.2.0";
+    constexpr const char *kPluginVersion = "0.2.2";
 
     // Squelch v1's upload-route ceiling. Files larger than this are rejected
     // before opening a connection.
@@ -1094,8 +1094,20 @@ namespace squelch
                  std::vector<Source *> sources,
                  std::vector<System *> systems) override
         {
-            if (tr_config != nullptr)
-                frequency_format = tr_config->frequency_format;
+            // Intentionally do NOT propagate tr_config->frequency_format into
+            // TR's global `frequency_format` (defined in formatter.cc). That
+            // symbol is exported by trunk_recorder_library, which the bundled
+            // TR plugins link against directly. We build out-of-tree (headers
+            // only via FetchContent), so referencing the global produces an
+            // undefined symbol that dlopen() cannot resolve against the
+            // visibility-hidden trunk-recorder executable:
+            //
+            //   dlerror: undefined symbol: frequency_format
+            //
+            // The plugin emits frequencyHz as a plain integer via its own
+            // stringstreams, so it never needs TR's format_freq() helper and
+            // therefore never needs the global at all.
+            (void)tr_config;
             (void)sources;
             (void)systems;
             BOOST_LOG_TRIVIAL(info)
