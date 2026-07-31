@@ -71,6 +71,10 @@ The plugin links against the same Boost / GNURadio components Trunk Recorder alr
 
 The reference build is in [revtex/OpenScanner — `systems-config/TrunkRecorder/Dockerfile`](https://github.com/revtex/OpenScanner/blob/main/systems-config/TrunkRecorder/Dockerfile). It clones this repo into `user_plugins/` during the builder stage so the resulting image ships with `squelch_uploader.so` pre-built.
 
+## Troubleshooting
+
+**`Squelch Upload attempt N/M failed (read function returned funny value)`** — this is libcurl `CURLE_READ_ERROR` (exit 26): the audio file could not be read when the upload was streamed. Uploads run on a background thread with retry/backoff, and Trunk Recorder removes or recycles the recording once every plugin's `call_end()` has returned, so a queued or retried upload could stream a file that had already been deleted. As of **0.2.3** the plugin stages a private copy of the audio in `$TMPDIR` (default `/tmp`) inside `call_end` and uploads from that copy, then deletes it when the job finishes — so this no longer happens. Ensure `$TMPDIR`/`/tmp` is writable and has room for a copy of the largest call.
+
 ## License
 
 GPL-3.0 — see [LICENSE](LICENSE).
